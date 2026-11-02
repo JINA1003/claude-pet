@@ -1,113 +1,135 @@
 # Claude Pet
 
-Claude Code 세션이 지금 무엇을 하는지 화면 구석의 작은 캐릭터로 보여 주는 데스크톱 펫이다.
-여러 세션을 띄워 두고 다른 일을 하다가, 펫 쪽으로 눈만 돌려 **손을 대야 하는 세션이 있는지**와 **어디까지 왔는지**를 판단하는 데 쓴다.
+**English** | [한국어](README.ko.md)
 
-- 말풍선: 위에 작은 글씨로 보낸 요청, 아래에 지금 하는 일 한 줄(덮어쓰기, 쌓이지 않는다)
-- 상태: 답변 필요(승인 · 질문) → 실패 → 응답 도착 → 진행 중 → 대기 순으로 급한 것을 먼저 보여 준다
-- 작업 위치: 세션을 연 폴더가 아니라 **마지막으로 고친 파일의 프로젝트 폴더**를 이름으로 쓴다
-- 작업함: 세션별 상태 · 요청 · 승인 대상 · 최근 활동 6개. 응답 본문은 저장하지 않고 상태만 남긴다
-- 캐릭터: 기본 4종, 그림 한 장, 또는 상태별 그림 폴더. 커서를 쳐다보고, 상태마다 다른 동작을 한다
-- Windows(WSL에서 돌리는 Claude Code 포함)와 macOS
+A desktop pet that sits in the corner of your screen and shows what each of your Claude Code sessions is doing right now.
 
-## 동작 방식
+## Purpose
 
-```
-Claude Code ──훅(hook.mjs)──▶ ~/.claude-pet/sessions/<세션 id>.json ──▶ 펫 앱(Electron)이 0.8초마다 읽음
-```
+When you run several Claude Code sessions at once and switch to other work, you lose track of them: one is stuck waiting for your approval, another finished ten minutes ago, a third is still editing files. Claude Pet answers two questions at a glance, without switching windows:
 
-- 훅은 세션마다 상태 파일 하나를 덮어쓴다. 네트워크는 쓰지 않고, 모든 기록은 이 컴퓨터에만 남는다.
-- 훅은 관찰만 한다. 어떤 오류가 나도 출력 없이 끝나서 Claude 작업을 막지 않는다.
-- WSL에서 돌리는 Claude Code는 상태 파일을 **Windows 홈**의 `.claude-pet`에 쓴다(펫 앱이 Windows에서 돌기 때문).
+1. **Does any session need me right now?** (approval, a question, a failure)
+2. **How far along is each session?** (what it is doing at this moment)
 
-| Claude Code 이벤트 | 펫에 남는 것 |
+It only observes. It never answers prompts, approves commands, or sends anything off your machine.
+
+## Features
+
+- **One-line status bubble** — your request in small text on top, the current step below (e.g. `index.html 고치는 중`, "editing index.html"). The line is replaced, never accumulated.
+- **Urgency order** — needs input → failed → response arrived → working → idle. The most urgent session is the one the bubble shows.
+- **Real work location** — sessions are named after the project folder of the file they last edited (nearest folder with `.git` or `package.json`), not the folder the session was started in. Paths in shell commands count too.
+- **Inbox window** — per session: state, request, approval target, and the last 6 steps. Response text is not stored; only the state is.
+- **Stacked cards** — when several sessions need you, cards pile up behind the bubble with a `+N` count.
+- **Characters** — 4 built-in characters, a single image, or a folder of per-state frames. Each state has its own motion (breathing, typing, hopping, jump, shake, sleep). The pet looks toward the cursor.
+- **UI language** — Korean.
+- **Desktop behavior** — always on top, drag to move (position is remembered), click-through on transparent areas, 4 sizes, light/dark follows the OS.
+
+## Specifications
+
+| Item | Value |
 |---|---|
-| `UserPromptSubmit` | 보낸 요청, 진행 시작 |
-| `PreToolUse` | 지금 하는 일 한 줄(예: `index.html 고치는 중`), 최근 활동, 작업 위치 |
-| `PermissionRequest` · `Notification` | 답변 필요와 승인 대상 |
-| `Stop` · `StopFailure` | 응답 도착 · 실패 |
-| `SessionEnd` | 상태 파일 삭제 |
+| App runtime | Electron 45 (Chromium + Node.js bundled; no separate Node needed to run the app) |
+| Hook runtime | Node.js 20+ in the environment where Claude Code runs |
+| Claude Code hooks used | `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PermissionRequest`, `Notification` (`permission_prompt`, `elicitation_dialog`), `Stop`, `StopFailure`, `SessionEnd` |
+| Data flow | hook → one JSON file per session in `~/.claude-pet/sessions/` → app polls every 0.8 s |
+| Network | none |
+| Stored per session | project, work location, request (one line), current step, state, last 6 steps, timestamps |
+| Session expiry | file removed on `SessionEnd`; hidden after 6 h without updates |
+| Hook safety | hook never prints and always exits 0, so it cannot block Claude Code; 5 s timeout |
+| Settings changes | adds hook entries to `~/.claude/settings.json` only, keeps a backup at `settings.json.claude-pet.bak`; uninstall removes only its own entries |
+| Windows build | portable `.exe` (x64), unsigned |
+| macOS build | universal `.dmg`, unsigned |
 
-## 설치
+## Environment
 
-Node.js 20 이상이 필요하다.
+| | Supported | Tested |
+|---|---|---|
+| Windows | Windows 10/11 x64, with Claude Code running inside **WSL2** | Windows 11 (build 26200), WSL2 Ubuntu 26.04 |
+| macOS | macOS 12+ (Intel and Apple Silicon) | not yet tested |
+| Claude Code | CLI with hooks support | 2.1.285 |
+| Node.js (build / hooks) | 20+ | 26.7.0 |
+| Electron / electron-builder | 45 / 26 | 45.1.0 / 26.18.0 |
+
+On Windows the app runs natively while Claude Code runs in WSL. The hook writes state files into the **Windows** home folder (`C:\Users\<you>\.claude-pet`) so the app can read them.
+
+Font: the UI uses `Jetendard` if installed, otherwise Pretendard, then the system font.
+
+## Install
 
 ### Windows + WSL
 
 ```bash
-# WSL에서
+# inside WSL
 npm install
-ELECTRON_INSTALL_PLATFORM=win32 node node_modules/electron/install.js   # Windows용 Electron 받기
-npm run dist:win    # dist/ClaudePet-<버전>-windows-x64.exe (설치 없이 실행하는 portable)
+ELECTRON_INSTALL_PLATFORM=win32 node node_modules/electron/install.js   # fetch the Windows Electron binary
+npm run dist:win    # → dist/ClaudePet-<version>-windows-x64.exe
 ```
 
-1. exe를 실행한다. 펫이 화면 오른쪽 아래에 뜬다.
-2. 펫을 오른쪽 클릭 → **Claude Pet 열기** → 작업함의 **Claude 연결하기**를 누른다.
-   WSL의 `~/.claude/settings.json`에 훅이 더해진다. 다른 설정은 건드리지 않고 `settings.json.claude-pet.bak`에 백업을 남긴다.
-3. Claude Code 세션을 새로 시작한다.
+1. Run the `.exe`. The pet appears at the bottom-right of the screen.
+2. Right-click the pet → **Claude Pet 열기** (Open Claude Pet) → press **Claude 연결하기** (Connect Claude) in the inbox.
+3. Start a new Claude Code session.
 
-로그인할 때 띄우려면 exe 바로가기를 `shell:startup`에 둔다.
+To start on login, put a shortcut to the `.exe` in `shell:startup`.
 
 ### macOS
 
 ```bash
 npm install
-npm run dist:mac    # dist/ClaudePet-<버전>-macOS-universal.dmg (macOS에서만 만들어진다)
+npm run dist:mac    # → dist/ClaudePet-<version>-macOS-universal.dmg (macOS only)
 ```
 
-서명하지 않은 앱이라 처음 열 때 경고가 뜬다. Control-클릭 → 열기로 연다. 연결은 Windows와 같이 앱의 **Claude 연결하기**로 한다.
+The app is unsigned, so the first launch shows a warning: Control-click → Open. Connect from the app the same way as on Windows.
 
-### 훅만 직접 다루기
+### Hooks only
 
 ```bash
-node install.mjs              # 훅 등록
-node install.mjs --uninstall  # 훅 제거
+node install.mjs              # register hooks
+node install.mjs --uninstall  # remove them
 ```
 
-## 쓰는 법
+## Usage
 
-- **펫을 누르면** 세션 목록이 펼쳐지고, **끌면** 옮겨진다. 놓은 자리는 기억한다.
-- **오른쪽 클릭**: Claude Pet 열기 · 캐릭터 바꾸기 · 크기(작게 · 기본 · 크게 · 아주 크게) · 제자리로 · 끄기
-- 말풍선의 **×**는 확인 표시다. 확인한 응답 · 실패는 대기로 내려가고 세션은 남는다.
-- 확인할 일이 여러 개면 말풍선 뒤에 카드가 겹쳐 보이고 `+N`이 붙는다.
-- 세션 수 칩은 몇 초 뒤 캐릭터 머리 위 별로 접힌다. 별을 누르면 목록이 열린다.
+- **Click** the pet to open the session list. **Drag** it to move.
+- **Right-click**: Claude Pet 열기 (open) · 캐릭터 바꾸기 (change character) · 크기 (size) · 제자리로 (reset position) · 끄기 (quit).
+- **×** on the bubble marks it as seen; the session stays and drops to idle.
+- The session-count chip folds into a small star above the pet after a few seconds. Click the star to open the list.
 
-### 캐릭터 폴더
+### Character folders
 
-상태별 PNG를 한 폴더에 넣고 **캐릭터 폴더 가져오기**로 고른다. 없는 상태는 `idle`로 대신한다.
+Put per-state PNGs in one folder and choose **캐릭터 폴더 가져오기** (import character folder). Missing states fall back to `idle`.
 
-| 상태 | 파일 이름 |
+| State | File names |
 |---|---|
-| 대기 | `idle-01.png` (필수) |
-| 진행 중 | `working-01.png`, `working-02.png` … |
-| 답변 필요 | `attention-01.png` … |
-| 응답 도착 | `result-01.png` … |
-| 실패 | `failed-01.png` … |
-| 세션 없음(잠) | `dormant-01.png` |
-| 눌렀을 때 인사 | `greeting-01.png` … |
-| 커서 쳐다보기 | `look-00.png` ~ `look-15.png` (16장, `00` = 위, `04` = 오른쪽, `08` = 아래, `12` = 왼쪽) |
+| Idle | `idle-01.png` (required) |
+| Working | `working-01.png`, `working-02.png`, … |
+| Needs input | `attention-01.png`, … |
+| Response arrived | `result-01.png`, … |
+| Failed | `failed-01.png`, … |
+| No session (asleep) | `dormant-01.png` |
+| Greeting on click | `greeting-01.png`, … |
+| Looking at cursor | `look-00.png` … `look-15.png` (16 frames; `00` up, `04` right, `08` down, `12` left) |
 
-같은 상태의 그림이 여러 장이면 번갈아 보여 준다. 투명 배경, 발이 아래에 닿게 그리면 자연스럽다.
+Multiple frames for a state are played in turn. Transparent background with the feet at the bottom works best.
 
-## 파일
+## Files
 
-| 파일 | 역할 |
+| File | Role |
 |---|---|
-| `hook.mjs` | Claude Code 훅. 이벤트를 세션 상태로 바꿔 파일에 쓴다 |
-| `install.mjs` | `~/.claude/settings.json`에 훅 등록 · 제거 |
-| `main.js` · `preload.js` | Electron 메인. 펫 창 · 작업함 창 · 메뉴 · 클릭 통과 처리 |
-| `index.html` | 펫 창(캐릭터 · 말풍선 · 세션 목록) |
-| `app.html` | 작업함 · 캐릭터 고르기 |
-| `status.js` · `characters.js` · `style.css` | 상태 정의 · 캐릭터 · 공통 스타일 |
-| `build-win.mjs` | Windows exe 빌드(아이콘 넣기 포함) |
-| `test.mjs` | 훅 → 상태 파일 흐름 검사 |
+| `hook.mjs` | Claude Code hook; turns events into session state |
+| `install.mjs` | registers / removes hooks in `~/.claude/settings.json` |
+| `main.js`, `preload.js` | Electron main: pet window, inbox window, menu, click-through |
+| `index.html` | pet window (character, bubble, session list) |
+| `app.html` | inbox and character picker |
+| `status.js`, `characters.js`, `style.css` | states, characters, shared styles |
+| `build-win.mjs` | Windows build (stamps the icon with rcedit) |
+| `test.mjs` | hook → state file test |
 
-## 검사
+## Test
 
 ```bash
 node test.mjs
 ```
 
-## 라이선스
+## License
 
 MIT
