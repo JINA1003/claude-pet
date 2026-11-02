@@ -1,0 +1,6 @@
+node_modules/
+dist/
+build/rcedit-x64.exe
+# 앱 아이콘 그림은 라이선스 확인 전이라 올리지 않는다. 있으면 빌드가 쓴다.
+build/icon.png
+build/icon.ico

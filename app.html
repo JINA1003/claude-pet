@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>Claude Pet</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  html, body { height: 100%; background: var(--page); }
+  body { display: grid; grid-template-columns: 200px 1fr; }
+  [hidden] { display: none !important; }
+  ::-webkit-scrollbar { width: 12px; } ::-webkit-scrollbar-thumb { background: var(--hairline); border-radius: 12px; border: 4px solid var(--page); }
+
+  nav { padding: 22px 12px; display: flex; flex-direction: column; gap: 2px; }
+  nav h1 { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 700; padding: 0 10px 22px; letter-spacing: -.01em; }
+  nav h1 .pet { width: 30px; height: 30px; }
+  nav button { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-radius: 10px; font-weight: 500; color: var(--muted); transition: background .2s, color .2s; }
+  nav button:hover { background: var(--hairline); color: var(--ink); }
+  nav button[aria-current=true] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+  nav .count { min-width: 20px; padding: 1px 7px; border-radius: 999px; background: var(--wait); color: #fff; font-size: 11px; font-weight: 700; text-align: center; }
+
+  main { overflow-y: auto; padding: 36px 40px 48px; }
+  .page { max-width: 760px; animation: copy-in .25s var(--ease); }
+  .head { display: flex; align-items: center; gap: 10px; }
+  h2 { font-size: 24px; font-weight: 700; letter-spacing: -.025em; }
+  .badge { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--wait-bg); color: var(--wait); font-variant-numeric: tabular-nums; }
+  .intro { margin-top: 6px; color: var(--muted); }
+
+  .connection { margin-top: 22px; display: flex; flex-wrap: wrap; gap: 10px 28px; }
+  .connection li { list-style: none; display: flex; align-items: flex-start; gap: 10px; }
+  .connection .ico { margin-top: 2px; }
+  .connection [data-on] .ico { color: #2f9e6b; } .connection [data-off] .ico { color: var(--faint); }
+  .connection strong { display: block; font-weight: 600; } .connection small { color: var(--muted); font-size: 12px; }
+  .connect { margin-top: 8px; padding: 7px 14px; border-radius: 10px; background: var(--done); color: #fff; font-weight: 600; transition: transform .2s var(--ease), filter .2s; }
+  .connect:hover { transform: translateY(-1px); filter: brightness(1.08); }
+
+  .toolbar { margin-top: 26px; padding-bottom: 12px; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid var(--hairline); }
+  .toolbar label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .toolbar select { height: 34px; min-width: 180px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--hairline); background: var(--surface); color: var(--ink); font: inherit; }
+  .toolbar .source { font-size: 12px; color: var(--faint); }
+
+  .list > article { background: #fff; margin-top: 10px; border-bottom: 0 !important; box-shadow: inset 0 1.5px 0 #fff, 0 8px 18px -12px rgb(61 107 166 / .5); border-radius: 20px !important; display: grid; grid-template-columns: minmax(0, 1fr) 160px auto; column-gap: 16px; padding: 18px 10px; border-bottom: 1px solid var(--hairline);
+    border-radius: 12px; transition: background .25s; animation: copy-in .3s var(--ease); }
+  .list > article:hover { background: color-mix(in srgb, var(--surface) 70%, transparent); }
+  .state { display: flex; gap: 12px; min-width: 0; }
+  .tile { width: 36px; height: 36px; flex: none; }
+  .tile .ico { width: 18px; height: 18px; }
+  .state strong { display: block; font-weight: 700; }
+  .state small { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); }
+  .identity { padding-top: 2px; min-width: 0; }
+  .identity strong { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .identity span { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .actions { display: flex; align-items: flex-start; gap: 4px; }
+  .actions button { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 9px; font-size: 12px; font-weight: 600; color: var(--muted); transition: background .2s, color .2s; }
+  .actions button:hover { background: var(--hairline); color: var(--ink); }
+  .activity { grid-column: 1 / -1; padding: 10px 0 0 46px; min-width: 0; }
+  .request { font-weight: 500; overflow-wrap: anywhere; }
+  .current { margin-top: 3px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+  .current b { color: var(--tone); font-weight: 600; }
+  .timeline { margin-top: 12px; }
+  .timeline > strong { font-size: 11.5px; font-weight: 700; color: var(--faint); }
+  .timeline ol { margin-top: 6px; padding: 0 0 0 12px; border-left: 2px solid var(--hairline); display: flex; flex-direction: column; gap: 4px; }
+  .timeline li { list-style: none; display: flex; gap: 12px; font-size: 12px; color: var(--muted); }
+  .timeline time { flex: none; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .timeline span { min-width: 0; overflow-wrap: anywhere; }
+  .empty { padding: 72px 16px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; color: var(--muted); }
+  .empty .pet { width: 72px; height: 72px; margin-bottom: 6px; }
+  .empty strong { color: var(--ink); font-weight: 600; }
+
+  #characters { margin-top: 22px; display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 14px; }
+  .choice { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 20px 8px 14px; border-radius: 16px;
+    background: var(--surface); box-shadow: var(--shadow); transition: transform .3s var(--ease), box-shadow .3s var(--ease); }
+  .choice:hover { transform: translateY(-3px); }
+  .choice[aria-pressed=true] { box-shadow: var(--shadow), 0 0 0 2px var(--done); }
+  .choice .pet { width: 76px; height: 76px; }
+  .choice span { font-weight: 600; }
+  .choice.add { color: var(--done); justify-content: center; background: transparent; box-shadow: inset 0 0 0 1.5px var(--hairline); }
+  .choice.add svg { width: 40px; height: 40px; }
+  .options { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 24px; }
+  .seg { display: flex; flex-direction: column; gap: 8px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .seg div { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: var(--hairline); }
+  .seg button { padding: 6px 12px; border-radius: 9px; font-weight: 600; color: var(--muted); transition: background .2s, color .2s; }
+  .seg button[aria-pressed=true] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgb(0 0 0 / .1); }
+</style>
+</head>
+<body>
+<nav>
+  <h1><span class="pet" id="logo" data-pet="idle"><span class="figure"></span></span>Claude Pet</h1>
+  <button data-view="inbox" aria-current="true">작업함<span class="count" id="nav-count" hidden></span></button>
+  <button data-view="character">캐릭터</button>
+</nav>
+<main>
+  <section class="page" id="inbox">
+    <div class="head"><h2>작업함</h2><span class="badge" id="todo" hidden></span></div>
+    <p class="intro">답이 필요한 질문, 실패, 도착한 응답과 진행 중인 세션을 한곳에 모아 둬요.</p>
+    <ul class="connection" id="connection"></ul>
+    <div class="toolbar">
+      <label>프로젝트<select id="project"><option value="">전체</option></select></label>
+      <span class="source">이 컴퓨터의 기록에서 가져와요</span>
+    </div>
+    <div class="list" id="list"></div>
+  </section>
+  <section class="page" id="character" hidden>
+    <div class="head"><h2>캐릭터</h2></div>
+    <p class="intro">고르면 바로 바뀌어요. 그림 한 장이나, 상태별 그림이 든 폴더(idle-01.png, working-01.png …)를 가져올 수 있어요.</p>
+    <div id="characters"></div>
+    <div class="options">
+      <div class="seg">미리보기<div id="states"></div></div>
+      <div class="seg">크기<div id="sizes"></div></div>
+    </div>
+  </section>
+</main>
+<script src="status.js"></script>
+<script src="characters.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id)
+  let config = { character: 'ink', customs: [] }, sessions = [], connection = {}, previewState = 'working', lastKey = ''
+  const clock = (t) => new Intl.DateTimeFormat('ko-KR', { hour: 'numeric', minute: '2-digit', second: '2-digit' }).format(new Date(t))
+
+  document.querySelectorAll('nav button').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('nav button').forEach((x) => x.setAttribute('aria-current', x === b))
+    $('inbox').hidden = b.dataset.view !== 'inbox'
+    $('character').hidden = b.dataset.view !== 'character'
+  }))
+
+  function renderConnection() {
+    const envs = navigator.userAgent.includes('Windows') ? [['wsl', 'Claude · WSL']] : [['darwin', 'Claude · Mac']]
+    $('connection').innerHTML = envs.map(([k, label]) => connection[k]
+      ? `<li data-on>${icon('done')}<span><strong>${label} · 연결됨</strong><small>${sessions.length ? '세션을 지켜보고 있어요.' : '아직 들어온 요청이 없어요. Claude에 요청을 한 번 보내 주세요.'}</small></span></li>`
+      : `<li data-off>${icon('idle')}<span><strong>${label} · 연결 안 됨</strong><small>Claude 설정에 훅을 더해야 세션이 보여요. 다른 설정은 건드리지 않고 백업도 남겨요.</small>
+         <button class="connect" id="connect">Claude 연결하기</button></span></li>`).join('')
+    $('connect')?.addEventListener('click', () => window.pet.connect())
+  }
+
+  function renderInbox() {
+    const projects = [...new Set(sessions.map(placeOf))].sort()
+    const sel = $('project'), cur = sel.value
+    sel.innerHTML = '<option value="">전체</option>' + projects.map((p) => `<option${p === cur ? ' selected' : ''}>${esc(p)}</option>`).join('')
+    const list = sessions.filter((s) => !sel.value || placeOf(s) === sel.value).sort(bySeverity)
+    const todo = sessions.filter(needsLook).length
+    $('todo').hidden = $('nav-count').hidden = !todo
+    $('todo').textContent = `확인할 일 ${todo}`
+    $('nav-count').textContent = todo
+
+    const key = JSON.stringify([sel.value, list.map((s) => [s.id, viewStatus(s), s.prompt, s.line, s.hint, s.steps?.length, s.updated, s.workdir])])
+    if (key === lastKey) return
+    lastKey = key
+    if (!list.length) {
+      $('list').innerHTML = `<div class="empty"><span class="pet" data-pet="none"><span class="figure">${petMarkup(pickCharacter(config))}</span></span>
+        <strong>${connection.wsl || connection.darwin ? '지금 열린 세션이 없어요' : '아직 Claude와 연결되지 않았어요'}</strong>
+        <span>${connection.wsl || connection.darwin ? 'Claude 세션에서 요청을 보내면 여기에 나타나요.' : '위의 Claude 연결하기를 누르면 세션이 여기에 모여요.'}</span></div>`
+      return
+    }
+    $('list').innerHTML = list.map((s) => {
+      const v = viewStatus(s), st = STATUS[v]
+      const current = v === 'waiting' && s.hint ? `<b>승인 대상</b> · ${esc(s.hint)}`
+        : v === 'working' ? `<b>현재</b> · ${esc(s.line || '작업 이어가는 중')}`
+        : v === 'error' ? `<b>오류</b> · ${esc(s.line)}` : ''
+      const steps = (s.steps || []).slice().reverse()
+      return `<article data-status="${v}">
+        <div class="state"><span class="tile sticker">${icon(v, 'ico' + (v === 'working' ? ' spin' : ''))}</span><span><strong><em class="hl">${st.label}</em></strong><small>${st.detail}</small></span></div>
+        <div class="identity"><strong>${esc(placeOf(s))}</strong><span>${fromOf(s) ? esc(fromOf(s)) + ' · ' : ''}Claude · ${ago(s.updated)}</span></div>
+        <div class="actions">${needsLook(s) ? `<button data-ack="${esc(s.id)}" data-updated="${s.updated}">${icon('check')}확인</button>` : ''}</div>
+        <div class="activity">
+          ${s.prompt ? `<p class="request">${esc(s.prompt)}</p>` : ''}
+          ${current ? `<p class="current">${current}</p>` : ''}
+          ${steps.length ? `<div class="timeline"><strong>최근 활동</strong><ol>${steps.map((x) => `<li><time>${clock(x.at)}</time><span>${esc(x.text)}</span></li>`).join('')}</ol></div>` : ''}
+        </div></article>`
+    }).join('')
+  }
+  $('project').addEventListener('change', () => { lastKey = ''; renderInbox() })
+  $('list').addEventListener('click', (e) => { const b = e.target.closest('[data-ack]'); if (b) window.pet.ack(b.dataset.ack, +b.dataset.updated) })
+  setInterval(() => { lastKey = ''; renderInbox() }, 30000) // 경과 시간 갱신
+
+  window.pet.onSessions((list) => { const had = sessions.length > 0; sessions = list; renderInbox(); if (had !== list.length > 0) renderConnection() })
+  window.pet.onConnection((c) => { const k = JSON.stringify(c); if (k !== renderConnection.k) { renderConnection.k = k; connection = c; renderConnection(); lastKey = ''; renderInbox() } })
+
+  function renderCharacters() {
+    const all = [...Object.entries(CHARACTERS).map(([id, c]) => ({ id, ...c })), ...config.customs]
+    $('characters').innerHTML = all.map((c) => `<button class="choice" data-id="${esc(c.id)}" aria-pressed="${config.character === c.id}">
+        <span class="pet" data-pet="${previewState}"><span class="figure">${petMarkup(c)}</span></span><span>${esc(c.name)}</span></button>`).join('')
+      + [['그림 한 장', 'image'], ['캐릭터 폴더', 'pack']].map(([label, kind]) => `<button class="choice add" data-import="${kind}">
+        <svg viewBox="0 0 40 40" aria-hidden="true"><path d="M20 11v18M11 20h18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg><span>${label} 가져오기</span></button>`).join('')
+    $('logo').querySelector('.figure').innerHTML = petMarkup(pickCharacter(config))
+    const states = { idle: '대기', working: '진행 중', waiting: '답변 필요', done: '응답 도착', error: '실패', none: '잠' }
+    $('states').innerHTML = Object.entries(states).map(([k, l]) => `<button data-state="${k}" aria-pressed="${k === previewState}">${l}</button>`).join('')
+    const sizes = { 96: '작게', 128: '기본', 168: '크게', 220: '아주 크게' }
+    $('sizes').innerHTML = Object.entries(sizes).map(([k, l]) => `<button data-size="${k}" aria-pressed="${+k === (config.size || 128)}">${l}</button>`).join('')
+  }
+  $('characters').addEventListener('click', (e) => {
+    const c = e.target.closest('.choice'); if (!c) return
+    if (c.dataset.import) return c.dataset.import === 'pack' ? window.pet.importPack() : window.pet.importCharacter()
+    window.pet.setCharacter(c.dataset.id)
+  })
+  $('states').addEventListener('click', (e) => { const b = e.target.closest('[data-state]'); if (b) { previewState = b.dataset.state; renderCharacters() } })
+  $('sizes').addEventListener('click', (e) => { const b = e.target.closest('[data-size]'); if (b) window.pet.setSize(+b.dataset.size) })
+  window.pet.onConfig((c) => { config = c; renderCharacters(); lastKey = ''; renderInbox() })
+</script>
+</body>
+</html>

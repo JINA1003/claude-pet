@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<link rel="stylesheet" href="style.css">
+<style>
+  html, body { height: 100%; background: transparent; overflow: hidden; user-select: none; }
+  /* 말풍선 폭은 캐릭터 크기에 비례(약 1.8배), 너무 좁거나 넓지 않게 */
+  :root { --pet-size: 128px; --bubble-w: clamp(230px, calc(var(--pet-size) * 1.8), 300px); }
+  [hidden] { display: none !important; }
+
+  /* 말풍선·목록은 캐릭터 왼쪽 머리 높이. 목록은 위로 펼쳐진다. */
+  #stack { position: absolute; right: calc(var(--pet-size) * .06 + 8px); bottom: 8px; /* 오른쪽은 ! 표시 자리 */ display: flex; align-items: flex-end; }
+  .col { display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+    margin-bottom: calc(var(--pet-size) * .5); margin-right: calc(var(--pet-size) * .14 + 8px); }
+
+  /* 말풍선: 뒤에 확인할 일이 더 있으면 카드가 겹쳐 보인다 */
+  .stack { position: relative; width: var(--bubble-w); }
+  /* 뒤 카드: ::before = 맨 뒤(버터), ::after = 바로 뒤(아이스). 오른쪽 위로 비껴 쌓인다 */
+  .stack::before, .stack::after { content: ""; position: absolute; inset: 0; border-radius: 22px; opacity: 0;
+    box-shadow: inset 0 0 0 1px rgb(125 167 217 / .45), 0 10px 22px -14px rgb(61 107 166 / .55); transition: opacity .3s var(--ease), transform .4s var(--ease); }
+  .stack::before { background: var(--butter); box-shadow: inset 0 0 0 1px rgb(242 201 76 / .7), 0 10px 22px -14px rgb(154 107 0 / .45); }
+  .stack::after { background: #eaf4ff; }
+  .stack[data-behind="1"]::after, .stack[data-behind="2"]::after { opacity: 1; transform: translate(9px, -10px) rotate(2.5deg); }
+  .stack[data-behind="2"]::before { opacity: 1; transform: translate(17px, -19px) rotate(5deg); }
+  .stack .more { position: absolute; z-index: 2; top: -9px; left: 14px; padding: 2px 9px; border-radius: 999px; background: var(--navy); color: var(--butter);
+    font-size: 11px; font-weight: 800; box-shadow: 0 4px 10px -4px rgb(47 72 96 / .6); }
+  .stack[data-behind="0"] .more { display: none; }
+  .bubble { position: relative; z-index: 1; width: 100%; display: grid; grid-template-columns: 30px 1fr; column-gap: 11px; align-items: center;
+    padding: 12px 34px 13px 12px; cursor: pointer; transition: transform .45s var(--ease); animation: bubble-in .5s var(--ease); }
+  .bubble:hover { transform: translateY(-2px) scale(1.01); }
+  .bubble:active { transform: scale(.98); transition-duration: .12s; }
+  .bubble .sticker { width: 30px; height: 30px; }
+  .bubble .sticker .ico { width: 17px; height: 17px; }
+  .copy { min-width: 0; animation: copy-in .18s ease-out both; }
+  .copy .prompt { font-size: 11px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .copy .prompt b { font-weight: 700; color: var(--muted); }
+  .copy .line { margin-top: 1px; font-weight: 600; color: var(--navy); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .copy .meta { margin-top: 3px; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  .bubble .go, .bubble .x { position: absolute; right: 9px; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; color: var(--faint); }
+  .bubble .go { bottom: 9px; } .bubble .x { top: 8px; opacity: 0; transition: opacity .2s ease-out, background .2s; }
+  .bubble:hover .x { opacity: 1; } .bubble .x:hover, .bubble .go:hover { background: var(--ice); color: var(--navy); }
+  .bubble[data-status=waiting] { animation: bubble-in .5s var(--ease), glow 2.8s ease-in-out .5s infinite; }
+  @keyframes bubble-in { from { opacity: 0; transform: translateY(10px) scale(.94); } 60% { transform: translateY(-2px) scale(1.01); } }
+  @keyframes glow { 50% { box-shadow: inset 0 1.5px 0 #fff, 0 0 0 3px rgb(255 223 110 / .55), 0 14px 32px -12px rgb(242 201 76 / .8); } }
+
+  /* 세션 수 칩: 하늘 알약에 버터 별 스티커. 확인할 일이 있으면 네이비 알약에 버터 글씨 */
+  #chip { align-self: flex-start; margin: -2px 0 0 14px; display: flex; align-items: center; gap: 6px; padding: 5px 13px 5px 7px;
+    border-radius: 999px; background: var(--ice); color: var(--navy); font-size: 12px; font-weight: 800;
+    box-shadow: inset 0 1.5px 0 rgb(255 255 255 / .8), 0 8px 18px -10px rgb(61 107 166 / .6);
+    transition: opacity .3s var(--ease), transform .4s var(--ease); }
+  #chip .star { width: 18px; height: 18px; transform: rotate(-12deg); }
+  #chip:hover { transform: translateY(-1px) rotate(-1deg); }
+  #chip .n { font-variant-numeric: tabular-nums; }
+  /* 확인할 일이 있어도 하늘 바탕은 그대로, 버터가 포인트로 붙는다(별이 돌고 숫자가 버터 알약) */
+  #chip[data-attention] { background: linear-gradient(180deg, #ffffff 0%, #eaf4ff 100%); }
+  #chip[data-attention] .star { animation: twirl 2.4s var(--ease) infinite; }
+  #chip[data-attention] .n { padding: 0 7px; border-radius: 999px; background: #ffdf6e; color: var(--navy); box-shadow: inset 0 1px 0 rgb(255 255 255 / .7); }
+  @keyframes twirl { 0%, 70%, 100% { transform: rotate(-12deg); } 85% { transform: rotate(30deg) scale(1.15); } }
+
+  #panel { width: var(--bubble-w); max-height: 320px; display: flex; flex-direction: column; animation: bubble-in .4s var(--ease); overflow: hidden;
+    background: linear-gradient(180deg, #eef6ff 0%, #e3f0ff 100%); }
+  #panel header { display: flex; align-items: center; gap: 7px; padding: 12px 10px 8px 14px; font-size: 12.5px; font-weight: 800; color: var(--navy); }
+  #panel header #panel-title { flex: 1; display: flex; align-items: center; gap: 7px; }
+  #panel header button { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; color: var(--muted); }
+  #panel header button:hover { background: rgb(255 255 255 / .8); color: var(--navy); }
+  #panel.empty { width: auto; flex-direction: row; align-items: center; padding: 6px 6px 6px 12px; border-radius: 999px; }
+  #panel.empty header { padding: 0; }
+  #panel.empty #rows { display: none; }
+  #panel #open-app { display: none; }
+  #panel.empty #open-app { display: inline-flex; width: auto; height: auto; padding: 5px 12px; border-radius: 999px; background: var(--butter); color: var(--navy); font-size: 12px; font-weight: 800;
+    box-shadow: inset 0 1.5px 0 #fff, 0 3px 8px -4px rgb(154 107 0 / .5); }
+  #rows { overflow-y: auto; padding: 0 9px 10px; display: flex; flex-direction: column; gap: 7px; }
+  #rows::-webkit-scrollbar { width: 8px; } #rows::-webkit-scrollbar-thumb { background: rgb(125 167 217 / .4); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+  /* 세션 한 장 = 상태 기록. 작업 위치·시각 / 상태 · 지금 하는 일 / 보낸 요청 */
+  .row { width: 100%; min-width: 0; display: grid; grid-template-columns: 30px minmax(0, 1fr); column-gap: 10px; align-items: start; padding: 10px 11px;
+    border-radius: 18px; background: #fff; box-shadow: inset 0 1.5px 0 #fff, 0 6px 14px -10px rgb(61 107 166 / .55);
+    transition: transform .4s var(--ease), box-shadow .4s var(--ease); }
+  .row:hover { transform: translateY(-1px) scale(1.012); box-shadow: 0 10px 20px -10px rgb(61 107 166 / .6); }
+  .row:active { transform: scale(.98); transition-duration: .1s; }
+  .row .sticker { width: 30px; height: 30px; margin-top: 1px; }
+  .row .sticker .ico { width: 16px; height: 16px; }
+  .row .body { min-width: 0; }
+  .row .head { display: flex; align-items: baseline; gap: 6px; }
+  .row .head b { min-width: 0; font-size: 12.5px; font-weight: 800; color: var(--navy); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .head .from { flex: 1; min-width: 0; font-size: 10.5px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .head time { flex: none; margin-left: auto; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .row .state, .row .req { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .state { margin-top: 3px; font-size: 12px; color: var(--muted); }
+  .row .req { margin-top: 3px; font-size: 11px; color: var(--faint); }
+
+  /* 세션 수: 잠시 보이다가 캐릭터 머리 위 별로 접힌다 */
+  #dot { position: absolute; left: 6%; top: 0; z-index: 3; width: 20px; height: 20px; padding: 0; opacity: 0; transform: scale(.3) rotate(-40deg); pointer-events: none;
+    transition: opacity .3s var(--ease), transform .5s var(--ease); }
+  #dot .star { width: 100%; height: 100%; }
+  #dot.show { opacity: 1; transform: rotate(-12deg); pointer-events: auto; }
+  #dot.show:hover { transform: scale(1.25) rotate(10deg); }
+  #dot[data-attention].show { animation: twirl 2.4s var(--ease) infinite; }
+  #dot:not([data-attention]) .star { color: var(--ice); }
+  #pet { width: var(--pet-size); height: var(--pet-size); cursor: grab; touch-action: none; }
+  #pet.dragging { cursor: grabbing; }
+</style>
+</head>
+<body>
+<main id="stack">
+  <div class="col">
+    <section id="panel" class="mochi" hidden aria-label="세션 목록">
+      <header><span id="panel-title"></span><button id="open-app">작업함</button><button id="panel-close" aria-label="목록 닫기"></button></header>
+      <div id="rows"></div>
+    </section>
+    <div class="stack" id="stack-bubble" hidden>
+      <span class="more" id="more"></span>
+      <article class="bubble mochi" id="bubble">
+        <span class="sticker"><svg class="ico" aria-hidden="true"><use/></svg></span>
+        <div class="copy"><p class="prompt"></p><p class="line"></p><p class="meta"></p></div>
+        <button class="x" aria-label="확인"></button>
+        <button class="go" aria-label="작업함에서 보기"></button>
+      </article>
+    </div>
+    <button id="chip" hidden></button>
+  </div>
+  <div id="pet" class="pet" data-pet="none" role="button" aria-label="Claude Pet">
+    <div class="figure"></div>
+    <button id="dot" aria-label="세션 목록"></button>
+    <div class="fx" aria-hidden="true"><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="ring"></i><b class="bang">!</b><i class="spark s1"></i><i class="spark s2"></i><i class="spark s3"></i><b class="z">z</b><b class="z">z</b><i class="heart"><svg viewBox="0 0 24 22"><path d="M12 21.2 10.6 20C5.4 15.4 2 12.3 2 8.4 2 5.3 4.4 3 7.5 3c1.7 0 3.4.8 4.5 2.1C13.1 3.8 14.8 3 16.5 3 19.6 3 22 5.3 22 8.4c0 3.9-3.4 7-8.6 11.6Z" fill="currentColor"/></svg></i></div>
+  </div>
+</main>
+<script src="status.js"></script>
+<script src="characters.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id)
+  const petEl = $('pet')
+  let sessions = [], open = false, lastBubbleKey = '', lastRowsKey = '', lastState = ''
+  $('panel-close').innerHTML = icon('close')
+  $('dot').innerHTML = star()
+  $('bubble').querySelector('.x').innerHTML = icon('close')
+  $('bubble').querySelector('.go').innerHTML = icon('open')
+
+  // 바뀐 것만 고친다. 매번 다시 그리면 애니메이션이 처음부터 다시 돈다.
+  function render() {
+    const sorted = [...sessions].sort(bySeverity)
+    const top = sorted[0]
+    const v = top && viewStatus(top)
+    const state = !top ? 'none' : v
+
+    if (state !== lastState) {
+      petEl.dataset.pet = state
+      petEl.classList.remove('enter'); void petEl.offsetWidth; petEl.classList.add('enter')
+      clearTimeout(render.t); render.t = setTimeout(() => petEl.classList.remove('enter'), 1300)
+      lastState = state
+    }
+
+    const showBubble = top && v !== 'idle' && !open
+    $('stack-bubble').hidden = !showBubble
+    if (showBubble) {
+      const key = [top.id, v, top.prompt, top.line, metaText(top), placeOf(top)].join('|')
+      if (key !== lastBubbleKey) {
+        const b = $('bubble'), copy = b.querySelector('.copy')
+        b.dataset.status = v
+        b.dataset.id = top.id
+        b.dataset.updated = top.updated
+        b.querySelector('use').setAttribute('href', `#i-${v}`)
+        b.querySelector('.ico').classList.toggle('spin', v === 'working')
+        // 응답 도착이면 큰 줄에 무엇을 부탁했는지를 보여 준다(상태는 아래 형광펜에)
+        copy.querySelector('.prompt').innerHTML = `<b>${esc(placeOf(top))}</b>${v !== 'done' && top.prompt ? ' · ' + esc(top.prompt) : ''}`
+        copy.querySelector('.line').textContent = v === 'done' ? top.prompt || '응답이 왔어요' : top.line || ''
+        copy.querySelector('.meta').innerHTML = `<em class="hl">${v === 'working' ? metaText(top) : STATUS[v].label}</em>${v !== 'working' && metaText(top) !== STATUS[v].label ? ' · ' + metaText(top) : ''}`
+        if (lastBubbleKey.split('|').slice(0, 4).join('|') !== key.split('|').slice(0, 4).join('|')) {
+          copy.style.animation = 'none'; void copy.offsetWidth; copy.style.animation = ''
+        }
+        b.querySelector('.x').hidden = v === 'working'
+        lastBubbleKey = key
+      }
+      const behind = sorted.filter(needsLook).length - (needsLook(top) ? 1 : 0)
+      $('stack-bubble').dataset.behind = Math.min(2, behind)
+      $('more').textContent = `+${behind + 1}` // 칩의 '확인 필요' 수와 같은 숫자
+    } else lastBubbleKey = ''
+
+    const attention = sorted.filter(needsLook).length
+    const chipKey = `${sessions.length}|${attention}`
+    if (chipKey !== render.chipKey) { // 개수가 바뀌면 다시 펼쳤다가 5초 뒤 점으로 접는다
+      render.chipKey = chipKey
+      render.folded = false
+      clearTimeout(render.fold)
+      render.fold = setTimeout(() => { render.folded = true; render() }, 5000)
+    }
+    const many = sessions.length >= 2 || attention > 0
+    const showChip = open || (many && !render.folded)
+    $('chip').hidden = !showChip
+    $('chip').innerHTML = attention ? `${star()}확인 필요 <span class="n">${attention}</span> · 세션 ${sessions.length}` : `${star()}세션 <span class="n">${sessions.length}</span>`
+    $('chip').toggleAttribute('data-attention', attention > 0)
+    $('dot').classList.toggle('show', many && !showChip)
+    $('dot').toggleAttribute('data-attention', attention > 0)
+
+    $('panel').hidden = !open
+    if (open) {
+      $('panel-title').innerHTML = `${star()}${sessions.length ? `세션 ${sessions.length}개` : '열린 세션 없음'}`
+      $('panel').classList.toggle('empty', !sessions.length)
+      const key = sorted.map((s) => [s.id, viewStatus(s), s.prompt, s.line, metaText(s), placeOf(s), ago(s.updated)].join('|')).join('/')
+      if (key !== lastRowsKey) {
+        $('rows').innerHTML = sorted.map((s) => {
+          const v = viewStatus(s)
+          return `<button class="row" data-status="${v}"><span class="sticker">${icon(v, 'ico' + (v === 'working' ? ' spin' : ''))}</span>
+            <span class="body"><span class="head"><b>${esc(placeOf(s))}</b><span class="from">${esc(fromOf(s))}</span><time>${ago(s.updated)}</time></span>
+            <p class="state"><em class="hl">${STATUS[v].label}</em>${statusLine(s) ? ' · ' + esc(statusLine(s)) : ''}</p>
+            ${s.prompt ? `<p class="req">요청 · ${esc(s.prompt)}</p>` : ''}</span></button>`
+        }).join('')
+        lastRowsKey = key
+      }
+    } else lastRowsKey = ''
+  }
+  setInterval(render, 15000) // 경과 시간 갱신
+
+  window.pet.onSessions((list) => { sessions = list; render() })
+  window.pet.onConfig((config) => {
+    document.documentElement.style.setProperty('--pet-size', `${config.size || 128}px`)
+    petEl.querySelector('.figure').innerHTML = petMarkup(pickCharacter(config))
+  })
+
+  const toggle = () => { open = !open; render() }
+  $('chip').addEventListener('click', toggle)
+  $('dot').addEventListener('pointerdown', (e) => e.stopPropagation())
+  $('dot').addEventListener('click', (e) => { e.stopPropagation(); toggle() })
+  $('panel-close').addEventListener('click', toggle)
+  $('open-app').addEventListener('click', () => { toggle(); window.pet.openApp() })
+  $('rows').addEventListener('click', (e) => e.target.closest('.row') && window.pet.openApp())
+  $('bubble').addEventListener('click', (e) => {
+    const b = $('bubble')
+    if (e.target.closest('.x')) return window.pet.ack(b.dataset.id, +b.dataset.updated)
+    window.pet.openApp()
+  })
+
+  // 시선: 커서가 가까우면 쳐다본다(기본 캐릭터는 눈동자, 캐릭터 폴더는 look-00~15)
+  window.pet.onCursor((x, y) => {
+    const b = petEl.getBoundingClientRect()
+    const dx = x - (b.x + b.width / 2), dy = y - (b.y + b.height * .4), far = Math.hypot(dx, dy)
+    const near = far > b.width * .3 && far < 380
+    if (near) petEl.dataset.look = Math.round(((Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360) / 22.5) % 16
+    else delete petEl.dataset.look
+    const t = near ? `translate(${(dx / far * 2.6).toFixed(2)}px, ${(dy / far * 2.2).toFixed(2)}px)` : ''
+    petEl.querySelectorAll('.eyes').forEach((g) => (g.style.transform = t))
+  })
+
+  // 누르면 인사 + 목록, 끌면 이동. 포인터 캡처라 놓는 순간을 놓치지 않고, 이동은 한 프레임에 한 번만 보낸다.
+  let down = null, pending = null
+  petEl.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return
+    petEl.setPointerCapture(e.pointerId)
+    down = { sx: e.screenX, sy: e.screenY, cx: e.clientX, cy: e.clientY, moved: false }
+  })
+  petEl.addEventListener('pointermove', (e) => {
+    if (!down) return
+    if (e.buttons === 0) return end()
+    if (!down.moved && Math.hypot(e.screenX - down.sx, e.screenY - down.sy) < 4) return
+    down.moved = true
+    petEl.classList.add('dragging')
+    if (!pending) requestAnimationFrame(() => { window.pet.moveTo(pending.x, pending.y); pending = null })
+    pending = { x: e.screenX - down.cx, y: e.screenY - down.cy }
+  })
+  function end() {
+    if (!down) return
+    petEl.classList.remove('dragging')
+    if (down.moved) window.pet.dragEnd()
+    else {
+      petEl.dataset.greet = 1
+      clearTimeout(end.t); end.t = setTimeout(() => delete petEl.dataset.greet, 1100)
+      toggle()
+    }
+    down = null
+  }
+  petEl.addEventListener('pointerup', end)
+  petEl.addEventListener('lostpointercapture', end)
+  petEl.addEventListener('contextmenu', (e) => { e.preventDefault(); window.pet.menu() })
+
+  // 클릭 받을 영역을 메인에 알린다(나머지는 아래 창으로 통과)
+  setInterval(() => {
+    const r = [...document.querySelectorAll('.bubble, #chip, #panel, #pet, #dot.show')].filter((el) => el.offsetParent)
+      .map((el) => { const b = el.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height } })
+    window.pet.rects(r)
+  }, 150)
+</script>
+</body>
+</html>

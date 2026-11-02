@@ -1,0 +1,56 @@
+{
+  "name": "claude-pet",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Claude Code 세션 상태를 화면 구석 캐릭터로 보여 주는 데스크톱 펫",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node test.mjs",
+    "install-hooks": "node install.mjs",
+    "uninstall-hooks": "node install.mjs --uninstall",
+    "dist:win": "node build-win.mjs",
+    "dist:mac": "electron-builder --mac dmg --universal"
+  },
+  "devDependencies": {
+    "electron": "^45.0.0",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "dev.jina.claude-pet",
+    "productName": "Claude Pet",
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "app.html",
+      "style.css",
+      "characters.js",
+      "status.js",
+      "hook.mjs",
+      "install.mjs",
+      "package.json",
+      "build/icon.png"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "portable",
+      "signAndEditExecutable": false
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.developer-tools",
+      "identity": null
+    },
+    "dmg": {
+      "artifactName": "ClaudePet-${version}-macOS-universal.dmg"
+    },
+    "portable": {
+      "artifactName": "ClaudePet-${version}-windows-x64.exe"
+    },
+    "compression": "normal"
+  },
+  "license": "MIT"
+}
