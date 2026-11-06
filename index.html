@@ -89,6 +89,10 @@
   .row .state, .row .req { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .row .state { margin-top: 3px; font-size: 12px; color: var(--muted); }
   .row .req { margin-top: 3px; font-size: 11px; color: var(--faint); }
+  .row { position: relative; }
+  .row .x { position: absolute; top: 7px; right: 7px; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; color: var(--faint); background: #fff; }
+  .row .x:hover { background: var(--ice); color: var(--navy); }
+  .row:has(.x) time { margin-right: 22px; }
 
   /* 세션 수: 잠시 보이다가 캐릭터 머리 위 별로 접힌다 */
   #dot { position: absolute; left: 6%; top: 0; z-index: 3; width: 20px; height: 20px; padding: 0; opacity: 0; transform: scale(.3) rotate(-40deg); pointer-events: none;
@@ -204,7 +208,8 @@
           return `<button class="row" data-status="${v}"><span class="sticker">${icon(v, 'ico' + (v === 'working' ? ' spin' : ''))}</span>
             <span class="body"><span class="head"><b>${esc(placeOf(s))}</b><span class="from">${esc(fromOf(s))}</span><time>${ago(s.updated)}</time></span>
             <p class="state"><em class="hl">${STATUS[v].label}</em>${statusLine(s) ? ' · ' + esc(statusLine(s)) : ''}</p>
-            ${s.prompt ? `<p class="req">요청 · ${esc(s.prompt)}</p>` : ''}</span></button>`
+            ${s.prompt ? `<p class="req">요청 · ${esc(s.prompt)}</p>` : ''}</span>
+            ${v === 'idle' ? `<span class="x" role="button" aria-label="대기 세션 끄기" title="목록에서 끄기" data-dismiss="${esc(s.id)}">${icon('close')}</span>` : ''}</button>`
         }).join('')
         lastRowsKey = key
       }
@@ -224,7 +229,11 @@
   $('dot').addEventListener('click', (e) => { e.stopPropagation(); toggle() })
   $('panel-close').addEventListener('click', toggle)
   $('open-app').addEventListener('click', () => { toggle(); window.pet.openApp() })
-  $('rows').addEventListener('click', (e) => e.target.closest('.row') && window.pet.openApp())
+  $('rows').addEventListener('click', (e) => {
+    const x = e.target.closest('[data-dismiss]')
+    if (x) return window.pet.dismiss(x.dataset.dismiss)
+    if (e.target.closest('.row')) window.pet.openApp()
+  })
   $('bubble').addEventListener('click', (e) => {
     const b = $('bubble')
     if (e.target.closest('.x')) return window.pet.ack(b.dataset.id, +b.dataset.updated)

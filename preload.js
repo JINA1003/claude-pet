@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('pet', {
   setSize: (px) => ipcRenderer.send('set-size', px),
   menu: () => ipcRenderer.send('menu'),
   ack: (id, updated) => ipcRenderer.send('ack', id, updated),
+  dismiss: (id) => ipcRenderer.send('dismiss', id),
   connect: () => ipcRenderer.send('connect'),
   onConnection: (fn) => ipcRenderer.on('connection', (_e, c) => fn(c)),
   openApp: () => ipcRenderer.send('open-app'),

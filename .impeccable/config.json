@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "clipped-overflow-container",
+        "value": "*",
+        "files": [
+          "index.html"
+        ],
+        "createdAt": "2026-11-06T08:49:08.165Z",
+        "reason": "claude: pre-existing overflow:hidden on html/body of fixed-size transparent pet window, intentional"
+      }
+    ]
+  }
+}

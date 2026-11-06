@@ -160,7 +160,7 @@
       return `<article data-status="${v}">
         <div class="state"><span class="tile sticker">${icon(v, 'ico' + (v === 'working' ? ' spin' : ''))}</span><span><strong><em class="hl">${st.label}</em></strong><small>${st.detail}</small></span></div>
         <div class="identity"><strong>${esc(placeOf(s))}</strong><span>${fromOf(s) ? esc(fromOf(s)) + ' · ' : ''}Claude · ${ago(s.updated)}</span></div>
-        <div class="actions">${needsLook(s) ? `<button data-ack="${esc(s.id)}" data-updated="${s.updated}">${icon('check')}확인</button>` : ''}</div>
+        <div class="actions">${needsLook(s) ? `<button data-ack="${esc(s.id)}" data-updated="${s.updated}">${icon('check')}확인</button>` : ''}${v === 'idle' ? `<button data-dismiss="${esc(s.id)}" aria-label="대기 세션 끄기" title="목록에서 끄기">${icon('close')}끄기</button>` : ''}</div>
         <div class="activity">
           ${s.prompt ? `<p class="request">${esc(s.prompt)}</p>` : ''}
           ${current ? `<p class="current">${current}</p>` : ''}
@@ -169,7 +169,10 @@
     }).join('')
   }
   $('project').addEventListener('change', () => { lastKey = ''; renderInbox() })
-  $('list').addEventListener('click', (e) => { const b = e.target.closest('[data-ack]'); if (b) window.pet.ack(b.dataset.ack, +b.dataset.updated) })
+  $('list').addEventListener('click', (e) => {
+    const x = e.target.closest('[data-dismiss]'); if (x) return window.pet.dismiss(x.dataset.dismiss)
+    const b = e.target.closest('[data-ack]'); if (b) window.pet.ack(b.dataset.ack, +b.dataset.updated)
+  })
   setInterval(() => { lastKey = ''; renderInbox() }, 30000) // 경과 시간 갱신
 
   window.pet.onSessions((list) => { const had = sessions.length > 0; sessions = list; renderInbox(); if (had !== list.length > 0) renderConnection() })

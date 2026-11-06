@@ -194,9 +194,10 @@ app.whenReady().then(() => {
     const [x, y] = pet.getPosition()
     setConfig({ pos: { x, y } })
   })
-  setInterval(() => pet.setAlwaysOnTop(true, 'screen-saver'), 2000) // 다른 '항상 위' 창에 밀리지 않게
+  // 끄는 도중(창은 닫혔고 프로세스는 아직)에 타이머가 돌면 'Object has been destroyed'가 뜬다
+  setInterval(() => !pet.isDestroyed() && pet.setAlwaysOnTop(true, 'screen-saver'), 2000) // 다른 '항상 위' 창에 밀리지 않게
   setInterval(() => {
-    if (dragging) return
+    if (dragging || pet.isDestroyed()) return
     const c = screen.getCursorScreenPoint(), b = pet.getBounds(), x = c.x - b.x, y = c.y - b.y
     if (x !== last.x || y !== last.y) pet.webContents.send('cursor', x, y) // 캐릭터 시선용
     last = { x, y }
@@ -211,6 +212,11 @@ app.whenReady().then(() => {
   ipcMain.on('set-character', (_e, id) => setCharacter(id))
   ipcMain.on('set-size', (_e, px) => setConfig({ size: px }))
   ipcMain.on('ack', (_e, id, updated) => { acks.set(id, updated); broadcast('sessions', readSessions()) })
+  // 대기 세션 끄기: SessionEnd처럼 상태 파일만 지운다(Claude 프로세스는 건드리지 않는다). 살아 있는 세션이면 다음 요청 때 다시 나타난다.
+  ipcMain.on('dismiss', (_e, id) => {
+    fs.rmSync(path.join(SESSIONS, `${String(id).replace(/[^\w-]/g, '')}.json`), { force: true })
+    broadcast('sessions', readSessions())
+  })
   ipcMain.on('connect', connect)
   setInterval(() => broadcast('connection', readConnection()), 5000)
   ipcMain.on('import-character', importCharacter)
