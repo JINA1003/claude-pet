@@ -209,7 +209,7 @@
             <span class="body"><span class="head"><b>${esc(placeOf(s))}</b><span class="from">${esc(fromOf(s))}</span><time>${ago(s.updated)}</time></span>
             <p class="state"><em class="hl">${STATUS[v].label}</em>${statusLine(s) ? ' · ' + esc(statusLine(s)) : ''}</p>
             ${s.prompt ? `<p class="req">요청 · ${esc(s.prompt)}</p>` : ''}</span>
-            ${v === 'idle' ? `<span class="x" role="button" aria-label="대기 세션 끄기" title="목록에서 끄기" data-dismiss="${esc(s.id)}">${icon('close')}</span>` : ''}</button>`
+            ${v === 'idle' ? `<span class="x" role="button" aria-label="대기 세션 끄기" title="세션 끄기" data-dismiss="${esc(s.id)}">${icon('close')}</span>` : ''}</button>`
         }).join('')
         lastRowsKey = key
       }

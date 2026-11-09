@@ -63,6 +63,18 @@
   .timeline li { list-style: none; display: flex; gap: 12px; font-size: 12px; color: var(--muted); }
   .timeline time { flex: none; color: var(--faint); font-variant-numeric: tabular-nums; }
   .timeline span { min-width: 0; overflow-wrap: anywhere; }
+  /* 서브에이전트: 세션 아래에 댓글처럼 매달린 스레드. 연결선은 상태색이 아니라 머리선 색 */
+  .agents { margin-top: 12px; }
+  .agents > strong { font-size: 11.5px; font-weight: 700; color: var(--faint); }
+  .agents ol { margin: 4px 0 0 7px; padding: 0; }
+  .agents li { list-style: none; position: relative; display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; column-gap: 8px; padding: 6px 0 6px 22px; }
+  .agents li::before { content: ''; position: absolute; left: 0; top: 0; width: 14px; height: 15px; border: 0 solid var(--hairline); border-width: 0 0 2px 2px; border-bottom-left-radius: 8px; }
+  .agents li:not(:last-child)::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0; border-left: 2px solid var(--hairline); }
+  .agents .ico { margin-top: 1px; color: var(--tone); }
+  .agents li > span { min-width: 0; }
+  .agents b { font-weight: 700; margin-right: 6px; }
+  .agents small { display: block; margin-top: 1px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+  .agents time { font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .empty { padding: 72px 16px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; color: var(--muted); }
   .empty .pet { width: 72px; height: 72px; margin-bottom: 6px; }
   .empty strong { color: var(--ink); font-weight: 600; }
@@ -142,7 +154,7 @@
     $('todo').textContent = `확인할 일 ${todo}`
     $('nav-count').textContent = todo
 
-    const key = JSON.stringify([sel.value, list.map((s) => [s.id, viewStatus(s), s.prompt, s.line, s.hint, s.steps?.length, s.updated, s.workdir])])
+    const key = JSON.stringify([sel.value, list.map((s) => [s.id, viewStatus(s), s.prompt, s.line, s.hint, s.steps?.length, s.updated, s.workdir, (s.agents || []).map((a) => [a.id, a.status, a.line, a.tools, a.desc])])])
     if (key === lastKey) return
     lastKey = key
     if (!list.length) {
@@ -157,16 +169,28 @@
         : v === 'working' ? `<b>현재</b> · ${esc(s.line || '작업 이어가는 중')}`
         : v === 'error' ? `<b>오류</b> · ${esc(s.line)}` : ''
       const steps = (s.steps || []).slice().reverse()
+      const agents = s.agents || [], running = agents.filter((a) => a.status === 'working').length
       return `<article data-status="${v}">
         <div class="state"><span class="tile sticker">${icon(v, 'ico' + (v === 'working' ? ' spin' : ''))}</span><span><strong><em class="hl">${st.label}</em></strong><small>${st.detail}</small></span></div>
         <div class="identity"><strong>${esc(placeOf(s))}</strong><span>${fromOf(s) ? esc(fromOf(s)) + ' · ' : ''}Claude · ${ago(s.updated)}</span></div>
-        <div class="actions">${needsLook(s) ? `<button data-ack="${esc(s.id)}" data-updated="${s.updated}">${icon('check')}확인</button>` : ''}${v === 'idle' ? `<button data-dismiss="${esc(s.id)}" aria-label="대기 세션 끄기" title="목록에서 끄기">${icon('close')}끄기</button>` : ''}</div>
+        <div class="actions">${needsLook(s) ? `<button data-ack="${esc(s.id)}" data-updated="${s.updated}">${icon('check')}확인</button>` : ''}${v === 'idle' ? `<button data-dismiss="${esc(s.id)}" aria-label="대기 세션 끄기" title="세션 끄기">${icon('close')}끄기</button>` : ''}</div>
         <div class="activity">
           ${s.prompt ? `<p class="request">${esc(s.prompt)}</p>` : ''}
           ${current ? `<p class="current">${current}</p>` : ''}
+          ${agents.length ? `<div class="agents"><strong>서브에이전트 ${agents.length}${running ? ` · 진행 중 ${running}` : ''}</strong><ol>${agents.map(agentRow).join('')}</ol></div>` : ''}
           ${steps.length ? `<div class="timeline"><strong>최근 활동</strong><ol>${steps.map((x) => `<li><time>${clock(x.at)}</time><span>${esc(x.text)}</span></li>`).join('')}</ol></div>` : ''}
         </div></article>`
     }).join('')
+  }
+  // 서브에이전트 한 줄: 종류 · 맡긴 일 / 지금 하는 일 / 경과
+  function agentRow(a) {
+    const mins = (t) => Math.floor((Date.now() - t) / 60000)
+    const tools = a.tools ? ` · 도구 ${a.tools}회` : ''
+    const [v, ico, note, meta] = a.status === 'working' ? ['working', 'working', a.line, `${mins(a.started || a.updated) < 1 ? '방금 시작' : `${mins(a.started || a.updated)}분째`}${tools}`]
+      : a.status === 'done' ? ['done', 'done', '', `끝남 · ${ago(a.finished || a.updated)}${tools}`]
+      : ['idle', 'idle', '끝난 기록 없이 멈췄어요', `멈춤${tools}`]
+    return `<li data-status="${v}">${icon(ico, 'ico' + (v === 'working' ? ' spin' : ''))}
+      <span><b>${esc(a.type)}</b>${esc(a.desc || '')}${note ? `<small>${esc(note)}</small>` : ''}</span><time>${meta}</time></li>`
   }
   $('project').addEventListener('change', () => { lastKey = ''; renderInbox() })
   $('list').addEventListener('click', (e) => {

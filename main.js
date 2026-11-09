@@ -21,9 +21,18 @@ function readSessions() {
   return names.flatMap((n) => {
     try {
       const s = JSON.parse(fs.readFileSync(path.join(SESSIONS, n), 'utf8'))
-      return Date.now() - s.updated < STALE_MS ? [{ ...s, acked: acks.get(s.id) === s.updated }] : []
+      return Date.now() - s.updated < STALE_MS ? [{ ...s, acked: acks.get(s.id) === s.updated, agents: readAgents(n.slice(0, -5)) }] : []
     } catch { return [] }
   })
+}
+
+// 세션의 서브에이전트(hook.mjs가 <세션 id>.agents/에 하나씩 쓴다), 시작 순
+function readAgents(id) {
+  const dir = path.join(SESSIONS, `${id}.agents`)
+  let names = []
+  try { names = fs.readdirSync(dir).filter((n) => n.endsWith('.json')) } catch { return [] }
+  return names.flatMap((n) => { try { return [JSON.parse(fs.readFileSync(path.join(dir, n), 'utf8'))] } catch { return [] } })
+    .sort((a, b) => (a.started || a.updated) - (b.started || b.updated))
 }
 
 // 훅 연결 표시: install.mjs가 남긴 connected-<환경>.json
@@ -212,9 +221,26 @@ app.whenReady().then(() => {
   ipcMain.on('set-character', (_e, id) => setCharacter(id))
   ipcMain.on('set-size', (_e, px) => setConfig({ size: px }))
   ipcMain.on('ack', (_e, id, updated) => { acks.set(id, updated); broadcast('sessions', readSessions()) })
-  // 대기 세션 끄기: SessionEnd처럼 상태 파일만 지운다(Claude 프로세스는 건드리지 않는다). 살아 있는 세션이면 다음 요청 때 다시 나타난다.
-  ipcMain.on('dismiss', (_e, id) => {
-    fs.rmSync(path.join(SESSIONS, `${String(id).replace(/[^\w-]/g, '')}.json`), { force: true })
+  // 대기 세션 끄기: 훅이 남긴 Claude 프로세스가 있으면 물어보고 끝낸다(SIGTERM, claude --resume으로 다시 열 수 있음).
+  // 상태 파일은 어느 쪽이든 지운다. 프로세스를 남겨 둔 세션은 다음 요청 때 다시 나타난다.
+  ipcMain.on('dismiss', async (_e, id) => {
+    const safe = String(id).replace(/[^\w-]/g, '')
+    let proc
+    try { proc = JSON.parse(fs.readFileSync(path.join(SESSIONS, `${safe}.json`), 'utf8')).proc } catch {}
+    const pid = parseInt(proc?.pid), start = parseInt(proc?.start)
+    if (pid > 1 && start > 0) {
+      const { response } = await dialog.showMessageBox({ type: 'question', buttons: ['세션 끝내기', '목록에서만 지우기', '취소'], defaultId: 0, cancelId: 2,
+        message: '이 Claude 세션을 끝낼까요?', detail: '터미널의 Claude가 종료돼요. 대화는 남아 있어 claude --resume으로 다시 열 수 있어요.' })
+      if (response === 2) return
+      if (response === 0) {
+        // 시작 시각이 같을 때만 끈다(그사이 pid가 다른 프로세스에 재사용됐으면 건드리지 않음)
+        const sh = `set -- $(sed 's/.*) //' /proc/${pid}/stat) && [ "\${20}" = ${start} ] && kill -TERM ${pid}`
+        if (process.platform === 'win32') execFile('wsl.exe', ['-e', 'sh', '-c', sh], () => {})
+        else execFile('sh', ['-c', sh], () => {})
+      }
+    }
+    fs.rmSync(path.join(SESSIONS, `${safe}.json`), { force: true })
+    fs.rmSync(path.join(SESSIONS, `${safe}.agents`), { recursive: true, force: true })
     broadcast('sessions', readSessions())
   })
   ipcMain.on('connect', connect)

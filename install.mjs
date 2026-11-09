@@ -13,7 +13,7 @@ const NODE = arg('--node') || `"${process.execPath}"`
 const SETTINGS = path.join(os.homedir(), '.claude', 'settings.json')
 const EVENTS = {
   SessionStart: null, UserPromptSubmit: null, PreToolUse: null, PostToolUse: null, PermissionRequest: null,
-  Notification: 'permission_prompt|elicitation_dialog', Stop: null, StopFailure: null, SessionEnd: null,
+  Notification: 'permission_prompt|elicitation_dialog', Stop: null, StopFailure: null, SessionEnd: null, SubagentStart: null, SubagentStop: null,
 }
 
 function stateDir() {

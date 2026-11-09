@@ -1,6 +1,6 @@
 {
   "name": "claude-pet",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Claude Code 세션 상태를 화면 구석 캐릭터로 보여 주는 데스크톱 펫",
   "main": "main.js",
