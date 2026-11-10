@@ -111,6 +111,8 @@ Put per-state PNGs in one folder and choose **캐릭터 폴더 가져오기** (i
 
 Multiple frames for a state are played in turn. Transparent background with the feet at the bottom works best.
 
+Optional `pack.json` in the folder: `{"scale": 1.4, "ms": {"working": 100}}` enlarges the drawing and sets the frame interval (ms) per state (`idle` · `working` · `waiting` · `done` · `error` · `none` · `greet`).
+
 ## Files
 
 | File | Role |

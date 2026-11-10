@@ -30,7 +30,9 @@
       "hook.mjs",
       "install.mjs",
       "package.json",
-      "build/icon.png"
+      "build/icon.png",
+      "build/tray.png",
+      "build/tray@2x.png"
     ],
     "directories": {
       "output": "dist"

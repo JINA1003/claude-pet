@@ -130,6 +130,8 @@ node install.mjs --uninstall  # 훅 제거
 
 같은 상태의 그림이 여러 장이면 번갈아 보여 준다. 투명 배경, 발이 아래에 닿게 그리면 자연스럽다.
 
+폴더에 `pack.json`을 두면 그림 배율과 상태별 프레임 간격(ms)을 정한다: `{"scale": 1.4, "ms": {"working": 100}}` (`idle` · `working` · `waiting` · `done` · `error` · `none` · `greet`).
+
 ## 파일
 
 | 파일 | 역할 |

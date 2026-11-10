@@ -11,16 +11,9 @@
   /* 터미널과 같은 글꼴(Jetendard = JetBrains Mono + Pretendard). 없으면 Pretendard → 시스템 글꼴 */
   font: 12.5px/1.5 "Jetendard", "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   color: var(--ink);
+  /* 카드 · 말풍선이 흰 스티커로 고정된 디자인이라 다크모드에서도 밝게 둔다(글자색만 바뀌면 흰 바탕에 흰 글씨가 된다) */
+  color-scheme: light;
   -webkit-font-smoothing: antialiased;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --surface: #2f4860; --page: #223649; --ink: #f4f8fd; --muted: #c2d3e6; --faint: #93aac2; --hairline: #3e5a75;
-    --wait: #fff7cc; --wait-bg: #4a4a2e; --wait-mark: #f2c94c;
-    --done: #a9c7ec; --done-bg: #3a5a7c; --fail: #f2a09e; --fail-bg: #4d3438;
-    --work: #c2d3e6; --work-bg: #3a5470;
-    --shadow: 0 12px 30px -10px rgb(10 20 30 / .6), 0 2px 6px rgb(10 20 30 / .3);
-  }
 }
 * { box-sizing: border-box; margin: 0; }
 ::selection { background: color-mix(in srgb, var(--done) 28%, transparent); }

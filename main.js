@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, dialog, ipcMain, screen } = require('electron')
+const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, screen } = require('electron')
 const { execFile } = require('node:child_process')
 const fs = require('node:fs')
 const os = require('node:os')
@@ -80,6 +80,11 @@ function readPack(dir) {
   return frames
 }
 
+// 캐릭터 폴더의 선택 설정 pack.json: { "scale": 1.4, "ms": { "working": 120 } } — 그림 배율 · 상태별 프레임 간격(ms)
+function readPackMeta(dir) {
+  try { return JSON.parse(fs.readFileSync(path.join(dir, 'pack.json'), 'utf8')) } catch { return {} }
+}
+
 function readConfig() {
   let config = { character: 'ink' }
   try { config = { ...config, ...JSON.parse(fs.readFileSync(CONFIG, 'utf8')) } } catch {}
@@ -89,7 +94,7 @@ function readConfig() {
     const full = path.join(CUSTOM, e.name)
     if (e.isDirectory()) {
       const frames = readPack(full)
-      return frames.idle ? [{ id: `pack:${e.name}`, name: e.name, frames }] : []
+      return frames.idle ? [{ id: `pack:${e.name}`, name: e.name, frames, ...readPackMeta(full) }] : []
     }
     return /\.(png|gif|webp|jpe?g|svg)$/i.test(e.name) ? [{ id: `custom:${e.name}`, name: path.parse(e.name).name, image: dataURL(full) }] : []
   })
@@ -128,6 +133,7 @@ async function importPack() {
 }
 
 function openApp() {
+  if (process.platform === 'darwin') app.focus({ steal: true }) // Dock을 숨긴 앱은 창을 열어도 다른 앱 뒤에 깔린다
   if (main && !main.isDestroyed()) return main.show(), main.focus()
   main = new BrowserWindow({ icon: path.join(__dirname, 'build', 'icon.png'), width: 980, height: 720, minWidth: 720, minHeight: 480, backgroundColor: '#f1f7fe', title: 'Claude Pet', autoHideMenuBar: true,
     webPreferences: { preload: path.join(__dirname, 'preload.js') } })
@@ -145,10 +151,11 @@ function openApp() {
   })
 }
 
+// 펫 오른쪽 클릭과 맥 메뉴 막대 아이콘이 같은 메뉴를 쓴다(누를 때마다 지금 설정으로 새로 만든다)
 function petMenu() {
   const { character, customs, size = 128 } = readConfig()
   const item = (id, label) => ({ label, type: 'radio', checked: character === id, click: () => setCharacter(id) })
-  Menu.buildFromTemplate([
+  return Menu.buildFromTemplate([
     { label: 'Claude Pet 열기', click: openApp },
     { label: '캐릭터 바꾸기', submenu: [
       ...Object.entries(BUILTIN).map(([id, n]) => item(id, n)),
@@ -159,7 +166,7 @@ function petMenu() {
     { label: '제자리로', click: () => { placePet(); setConfig({ pos: null }) } },
     { type: 'separator' },
     { label: '끄기', click: () => app.quit() },
-  ]).popup({ window: pet })
+  ])
 }
 
 function placePet() {
@@ -170,6 +177,9 @@ function placePet() {
 // 하나만 띄운다. 다시 실행하면 작업함을 연다.
 if (!app.requestSingleInstanceLock()) app.quit()
 app.on('second-instance', () => openApp())
+app.on('activate', () => app.isReady() && openApp()) // 맥은 실행 중인 앱을 다시 열면 second-instance 대신 이것만 온다
+
+let tray // 지역 변수면 가비지 컬렉션으로 아이콘이 사라진다
 
 app.whenReady().then(() => {
   if (process.argv.includes('--open')) openApp()
@@ -186,7 +196,14 @@ app.whenReady().then(() => {
     pet.setPosition(Math.min(Math.max(pos.x, wa.x), wa.x + wa.width - W), Math.min(Math.max(pos.y, wa.y), wa.y + wa.height - H))
   } else placePet()
   pet.setAlwaysOnTop(true, 'screen-saver')
-  if (process.platform === 'darwin') { pet.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); app.dock?.hide() }
+  if (process.platform === 'darwin') {
+    pet.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); app.dock?.hide()
+    // Dock 대신 메뉴 막대에 아이콘. 앱 아이콘과 같은 고양이 그림을 그대로 줄여 쓴다(Template로 단색 변환하지 않음)
+    tray = new Tray(path.join(__dirname, 'build', 'tray.png'))
+    tray.setToolTip('Claude Pet')
+    tray.on('click', () => tray.popUpContextMenu(petMenu()))
+    tray.on('right-click', () => tray.popUpContextMenu(petMenu()))
+  }
   pet.setIgnoreMouseEvents(true)
   pet.loadFile('index.html')
   pet.webContents.on('did-finish-load', () => { pet.webContents.send('config', readConfig()); pet.webContents.send('sessions', readSessions()) })
@@ -216,7 +233,7 @@ app.whenReady().then(() => {
     pet.setIgnoreMouseEvents(ignoring)
   }, 16)
 
-  ipcMain.on('menu', petMenu)
+  ipcMain.on('menu', () => petMenu().popup({ window: pet }))
   ipcMain.on('open-app', openApp)
   ipcMain.on('set-character', (_e, id) => setCharacter(id))
   ipcMain.on('set-size', (_e, px) => setConfig({ size: px }))

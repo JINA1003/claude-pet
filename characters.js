@@ -23,8 +23,13 @@ const face = (c) => `
 
 // 캐릭터 → 마크업. 그림 한 장이면 { image }, 캐릭터 폴더면 { frames: { idle: [...], working: [...] } }
 window.PACKS = {}
+const PACK_MS = {} // 캐릭터 폴더 pack.json의 상태별 프레임 간격
 window.petMarkup = (c) => {
-  if (c.frames) { PACKS[c.id] = c.frames; return `<img class="frame" data-pack="${esc(c.id)}" alt="" draggable="false">` }
+  if (c.frames) {
+    PACKS[c.id] = c.frames; PACK_MS[c.id] = c.ms || {}
+    const scale = +c.scale > 0 ? `transform: scale(${+c.scale}); transform-origin: 50% 100%;` : ''
+    return `<img class="frame" data-pack="${esc(c.id)}" style="${scale}" alt="" draggable="false">`
+  }
   const figure = c.image
     ? `<image href="${c.image}" x="4" y="4" width="68" height="68" preserveAspectRatio="xMidYMax meet"/>`
     : `<path d="${c.body}" fill="${c.fill}" ${c.stroke ? `stroke="${c.stroke}" stroke-width="1.5"` : ''}/>
@@ -48,7 +53,8 @@ window.paintFrames = (now = performance.now()) => document.querySelectorAll('img
   // 커서가 가까우면 쳐다본다(잠들어 있어도 깬다). 답변 필요·실패 동작은 가리지 않는다.
   else if (pet.look && frames.look?.length === 16 && !['waiting', 'error'].includes(pet.pet)) list = [frames.look[+pet.look]]
   else list = frames[FRAME_STATE[pet.pet]] || (pet.pet === 'waiting' && frames.waiting) || frames.idle || []
-  if (now - frameAt > (FRAME_MS[pet.greet ? 'greet' : pet.pet] || 500)) { frameAt = now; frameIndex++ }
+  const key = pet.greet ? 'greet' : pet.pet
+  if (now - frameAt > (PACK_MS[img.dataset.pack]?.[key] || FRAME_MS[key] || 500)) { frameAt = now; frameIndex++ }
   const src = list[frameIndex % list.length]
   if (src && img.getAttribute('src') !== src) img.setAttribute('src', src)
 })
