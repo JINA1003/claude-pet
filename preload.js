@@ -17,4 +17,7 @@ contextBridge.exposeInMainWorld('pet', {
   setCharacter: (id) => ipcRenderer.send('set-character', id),
   importPack: () => ipcRenderer.send('import-pack'),
   importCharacter: () => ipcRenderer.send('import-character'),
+  popHeight: (h) => ipcRenderer.send('pop-height', h),
+  popClose: () => ipcRenderer.send('pop-close'),
+  setPetVisible: (on) => ipcRenderer.send('pet-visible', on),
 })

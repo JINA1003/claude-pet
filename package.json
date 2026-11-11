@@ -23,7 +23,7 @@
       "main.js",
       "preload.js",
       "index.html",
-      "app.html",
+      "app.html","popover.html",
       "style.css",
       "characters.js",
       "status.js",
@@ -32,7 +32,7 @@
       "package.json",
       "build/icon.png",
       "build/tray.png",
-      "build/tray@2x.png"
+      "build/tray@2x.png","build/tray-done.png","build/tray-done@2x.png","build/tray-dim.png","build/tray-dim@2x.png","build/tray-error.png","build/tray-error@2x.png"
     ],
     "directories": {
       "output": "dist"

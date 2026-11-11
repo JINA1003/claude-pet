@@ -1,5 +1,5 @@
 const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, screen } = require('electron')
-const { execFile } = require('node:child_process')
+const { execFile, execFileSync } = require('node:child_process')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
@@ -33,6 +33,57 @@ function readAgents(id) {
   try { names = fs.readdirSync(dir).filter((n) => n.endsWith('.json')) } catch { return [] }
   return names.flatMap((n) => { try { return [JSON.parse(fs.readFileSync(path.join(dir, n), 'utf8'))] } catch { return [] } })
     .sort((a, b) => (a.started || a.updated) - (b.started || b.updated))
+}
+
+// 프로세스 시작 시각(hook.mjs procInfo와 같은 값). 없는 pid면 null
+function procStart(pid) {
+  try {
+    if (process.platform === 'darwin') return execFileSync('ps', ['-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8' }).trim() || null
+    return fs.readFileSync(`/proc/${pid}/stat`, 'utf8').replace(/^.*\) /s, '').split(' ')[19]
+  } catch { return null }
+}
+const procAlive = (proc) => !!proc && procStart(proc.pid) === String(proc.start)
+
+// 터미널을 닫거나 강제 종료돼 SessionEnd 없이 끝난 세션: Claude 프로세스가 없으면 기록을 지운다.
+// shortcut: Windows는 Claude가 WSL 안에 있어 확인하지 않음(6시간 숨김만), 필요해지면 wsl.exe로 한 번에 묻기
+function sweepDead() {
+  if (process.platform === 'win32') return
+  let names = []
+  try { names = fs.readdirSync(SESSIONS).filter((n) => n.endsWith('.json')) } catch { return }
+  for (const n of names) {
+    let s
+    try { s = JSON.parse(fs.readFileSync(path.join(SESSIONS, n), 'utf8')) } catch { continue }
+    // 프로세스 기록이 없는 옛 파일(맥 기록 전 훅)은 6시간 지나면 지운다. 숨기기만 하면 폴더에 계속 쌓인다
+    if (s.proc?.pid ? !procAlive(s.proc) : Date.now() - (s.updated || 0) > STALE_MS) removeSession(n.slice(0, -5))
+    else if (idleTooLong(s)) {
+      killProc(s.proc)
+      removeSession(n.slice(0, -5))
+      fs.appendFileSync(path.join(HOME, 'app.log'), `${new Date().toISOString()} auto-close ${s.id} ${s.workdir || s.project} · ${s.status} · ${Math.round((Date.now() - s.updated) / 60000)}분 · ${s.prompt || ''}\n`)
+    }
+  }
+}
+
+// 놀고 있는 세션 자동 끄기: 응답이 끝난 뒤(대기 · 응답 도착 · 실패) 30분 동안 아무 활동이 없으면 끈다.
+// 진행 중 · 답변 필요(승인 · 질문 대기) · 서브에이전트가 도는 세션 · Remote Control(claude rc)은 끄지 않는다. 대화는 남아 --resume으로 다시 연다
+const IDLE_CLOSE_MS = 30 * 60000
+function idleTooLong(s) {
+  if (readConfig().autoClose === false || !procAlive(s.proc)) return false
+  if (!['idle', 'done', 'error'].includes(s.status) || Date.now() - (s.updated || Date.now()) < IDLE_CLOSE_MS) return false
+  if (readAgents(s.id).some((a) => a.status === 'working')) return false
+  try { return !/\bclaude\s+(rc|remote-control)\b/.test(execFileSync('ps', ['-o', 'command=', '-p', String(s.proc.pid)], { encoding: 'utf8' })) } catch { return false }
+}
+// 시작 시각이 같을 때만 끈다(그사이 pid가 다른 프로세스에 재사용됐으면 건드리지 않음)
+function killProc(proc) {
+  const pid = parseInt(proc?.pid), start = String(proc?.start ?? '')
+  if (!(pid > 1)) return
+  if (process.platform === 'win32') {
+    if (!/^\d+$/.test(start)) return // WSL 셸에 넣는 값은 숫자만 받는다
+    execFile('wsl.exe', ['-e', 'sh', '-c', `set -- $(sed 's/.*) //' /proc/${pid}/stat) && [ "\${20}" = ${start} ] && kill -TERM ${pid}`], () => {})
+  } else if (procAlive(proc)) try { process.kill(pid, 'SIGTERM') } catch {}
+}
+function removeSession(id) {
+  fs.rmSync(path.join(SESSIONS, `${id}.json`), { force: true })
+  fs.rmSync(path.join(SESSIONS, `${id}.agents`), { recursive: true, force: true })
 }
 
 // 훅 연결 표시: install.mjs가 남긴 connected-<환경>.json
@@ -101,15 +152,18 @@ function readConfig() {
   return config
 }
 
-let pet, main
-const broadcast = (ch, data) => [pet, main].forEach((w) => w && !w.isDestroyed() && w.webContents.send(ch, data))
+let pet, main, pop
+const broadcast = (ch, data) => [pet, main, pop].forEach((w) => w && !w.isDestroyed() && w.webContents.send(ch, data))
 
 function setConfig(patch) {
   fs.mkdirSync(HOME, { recursive: true })
   const { customs, ...config } = readConfig()
   fs.writeFileSync(CONFIG, JSON.stringify({ ...config, ...patch }))
   broadcast('config', readConfig())
+  if ('petHidden' in patch) showPet()
 }
+// 펫 숨기기(맥): 앱은 상단바에 남고 펫 창만 감춘다
+const showPet = () => pet && !pet.isDestroyed() && (readConfig().petHidden ? pet.hide() : pet.showInactive())
 const setCharacter = (id) => setConfig({ character: id })
 
 async function importCharacter() {
@@ -153,10 +207,12 @@ function openApp() {
 
 // 펫 오른쪽 클릭과 맥 메뉴 막대 아이콘이 같은 메뉴를 쓴다(누를 때마다 지금 설정으로 새로 만든다)
 function petMenu() {
-  const { character, customs, size = 128 } = readConfig()
+  const { character, customs, size = 128, petHidden, autoClose } = readConfig()
   const item = (id, label) => ({ label, type: 'radio', checked: character === id, click: () => setCharacter(id) })
   return Menu.buildFromTemplate([
     { label: 'Claude Pet 열기', click: openApp },
+    ...(tray ? [{ label: '펫 띄우기', type: 'checkbox', checked: !petHidden, click: () => setConfig({ petHidden: !petHidden }) }] : []),
+    ...(process.platform === 'win32' ? [] : [{ label: '놀고 있는 세션 30분 뒤 끄기', type: 'checkbox', checked: autoClose !== false, click: () => setConfig({ autoClose: autoClose === false }) }]),
     { label: '캐릭터 바꾸기', submenu: [
       ...Object.entries(BUILTIN).map(([id, n]) => item(id, n)),
       ...customs.map((c) => item(c.id, c.name)),
@@ -165,8 +221,31 @@ function petMenu() {
     { label: '크기', submenu: Object.entries(SIZES).map(([px, label]) => ({ label, type: 'radio', checked: +px === size, click: () => setConfig({ size: +px }) })) },
     { label: '제자리로', click: () => { placePet(); setConfig({ pos: null }) } },
     { type: 'separator' },
-    { label: '끄기', click: () => app.quit() },
+    { label: 'Claude Pet 끝내기', click: () => app.quit() },
   ])
+}
+
+// 상단바 팝업: 아이콘을 누르면 아래로 펼쳐지는 작은 세션 요약. 펫을 숨겨도 쓸 수 있다
+const POP_W = 360
+let popHiddenAt = 0
+function togglePopover() {
+  if (pop?.isVisible()) return pop.hide()
+  if (Date.now() - popHiddenAt < 300) return // 아이콘을 눌러 닫을 때: blur로 먼저 닫힌 걸 다시 열지 않는다
+  if (!pop || pop.isDestroyed()) {
+    pop = new BrowserWindow({ width: POP_W, height: 200, show: false, frame: false, transparent: true, resizable: false, movable: false, minimizable: false,
+      maximizable: false, fullscreenable: false, skipTaskbar: true, hasShadow: false, alwaysOnTop: true, webPreferences: { preload: path.join(__dirname, 'preload.js') } })
+    pop.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    pop.on('blur', () => { popHiddenAt = Date.now(); pop.hide() })
+    pop.loadFile('popover.html')
+    pop.webContents.on('did-finish-load', () => { pop.webContents.send('config', readConfig()); pop.webContents.send('sessions', readSessions()); placePopover(); pop.show() })
+    return
+  }
+  pop.webContents.send('sessions', readSessions())
+  placePopover(); pop.show()
+}
+function placePopover() {
+  const t = tray.getBounds(), { workArea: wa } = screen.getDisplayNearestPoint({ x: t.x, y: t.y })
+  pop.setPosition(Math.round(Math.min(Math.max(t.x + t.width / 2 - POP_W / 2, wa.x + 8), wa.x + wa.width - POP_W - 8)), wa.y + 4)
 }
 
 function placePet() {
@@ -201,10 +280,14 @@ app.whenReady().then(() => {
     // Dock 대신 메뉴 막대에 아이콘. 앱 아이콘과 같은 고양이 그림을 그대로 줄여 쓴다(Template로 단색 변환하지 않음)
     tray = new Tray(path.join(__dirname, 'build', 'tray.png'))
     tray.setToolTip('Claude Pet')
-    tray.on('click', () => tray.popUpContextMenu(petMenu()))
+    tray.on('click', togglePopover) // 왼쪽 클릭 = 세션 요약, 오른쪽 클릭 = 설정 메뉴
     tray.on('right-click', () => tray.popUpContextMenu(petMenu()))
+    ipcMain.on('pop-height', (_e, h) => pop && !pop.isDestroyed() && pop.setSize(POP_W, Math.min(Math.ceil(h), 640)))
+    ipcMain.on('pet-visible', (_e, on) => setConfig({ petHidden: !on }))
+    ipcMain.on('pop-close', () => pop?.hide())
   }
   pet.setIgnoreMouseEvents(true)
+  if (tray && readConfig().petHidden) pet.hide()
   pet.loadFile('index.html')
   pet.webContents.on('did-finish-load', () => { pet.webContents.send('config', readConfig()); pet.webContents.send('sessions', readSessions()) })
 
@@ -244,27 +327,38 @@ app.whenReady().then(() => {
     const safe = String(id).replace(/[^\w-]/g, '')
     let proc
     try { proc = JSON.parse(fs.readFileSync(path.join(SESSIONS, `${safe}.json`), 'utf8')).proc } catch {}
-    const pid = parseInt(proc?.pid), start = parseInt(proc?.start)
-    if (pid > 1 && start > 0) {
+    // 맥 · Linux의 시작 시각은 ps 날짜 글자라 숫자가 아니다. WSL 셸에 넣는 값은 숫자만 받는다
+    const pid = parseInt(proc?.pid), start = String(proc?.start ?? '')
+    if (pid > 1 && (process.platform === 'win32' ? /^\d+$/.test(start) : procAlive(proc))) {
       const { response } = await dialog.showMessageBox({ type: 'question', buttons: ['세션 끝내기', '목록에서만 지우기', '취소'], defaultId: 0, cancelId: 2,
         message: '이 Claude 세션을 끝낼까요?', detail: '터미널의 Claude가 종료돼요. 대화는 남아 있어 claude --resume으로 다시 열 수 있어요.' })
       if (response === 2) return
-      if (response === 0) {
-        // 시작 시각이 같을 때만 끈다(그사이 pid가 다른 프로세스에 재사용됐으면 건드리지 않음)
-        const sh = `set -- $(sed 's/.*) //' /proc/${pid}/stat) && [ "\${20}" = ${start} ] && kill -TERM ${pid}`
-        if (process.platform === 'win32') execFile('wsl.exe', ['-e', 'sh', '-c', sh], () => {})
-        else execFile('sh', ['-c', sh], () => {})
-      }
+      if (response === 0) killProc(proc)
     }
-    fs.rmSync(path.join(SESSIONS, `${safe}.json`), { force: true })
-    fs.rmSync(path.join(SESSIONS, `${safe}.agents`), { recursive: true, force: true })
+    removeSession(safe)
     broadcast('sessions', readSessions())
   })
   ipcMain.on('connect', connect)
   setInterval(() => broadcast('connection', readConnection()), 5000)
   ipcMain.on('import-character', importCharacter)
   ipcMain.on('import-pack', importPack)
-  setInterval(() => broadcast('sessions', readSessions()), 800)
+  setInterval(() => {
+    const list = readSessions()
+    broadcast('sessions', list)
+    // 확인할 세션이 있으면 상단바 고양이 오른쪽에 별(status.js needsLook과 같은 기준). 급한 순서(status.js rank)대로
+    // 답변 필요 = 노랑 깜빡임(노랑 ↔ 옅은 노랑), 실패 = 분홍, 응답 도착 = 노랑.
+    // 그림 원본은 build/tray-star.svg(노랑, 채움 · 테두리 · 반짝이 색만 바꿔 만든다). 깜빡임 프레임도 폭이 같아 메뉴 막대가 흔들리지 않는다
+    const st = list.filter((s) => !s.acked).map((s) => s.status)
+    const look = st.includes('waiting') ? 'wait' : st.includes('error') ? 'error' : st.includes('done') ? 'done' : ''
+    if (tray && look !== tray.look) {
+      tray.look = look
+      clearInterval(tray.blink)
+      const img = (n) => tray.setImage(path.join(__dirname, 'build', n))
+      if (look === 'wait') { let on = true; img('tray-done.png'); tray.blink = setInterval(() => img((on = !on) ? 'tray-done.png' : 'tray-dim.png'), 700) }
+      else img(look ? `tray-${look}.png` : 'tray.png')
+    }
+  }, 800)
+  sweepDead(); setInterval(sweepDead, 10_000)
 })
 
 app.on('window-all-closed', () => {}) // 앱 창을 닫아도 펫은 남는다

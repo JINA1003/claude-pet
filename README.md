@@ -90,7 +90,8 @@ node install.mjs --uninstall  # remove them
 ## Usage
 
 - **Click** the pet to open the session list. **Drag** it to move.
-- **Right-click**: Claude Pet 열기 (open) · 캐릭터 바꾸기 (change character) · 크기 (size) · 제자리로 (reset position) · 끄기 (quit).
+- **Right-click**: Claude Pet 열기 (open) · 캐릭터 바꾸기 (change character) · 크기 (size) · 제자리로 (reset position) · Claude Pet 끝내기 (quit).
+- **macOS menu bar icon**: left-click opens a session summary popover (status, request, and each subagent's type, role, and assigned task); right-click opens the menu above. The menu's 놀고 있는 세션 30분 뒤 끄기 (on by default) ends sessions with no activity for 30 minutes after their last reply; it never touches sessions that are working, waiting for your answer, running subagents, or Remote Control (`claude rc`). Each close is logged to `~/.claude-pet/app.log`; reopen with `claude --resume`. A star appears beside the cat when a session needs a look (blinking yellow = needs your answer, pink = failed, yellow = response arrived). The popover's 펫 button, or 펫 띄우기 in the menu, hides just the pet and keeps the menu bar icon.
 - **×** on the bubble marks it as seen; the session stays and drops to idle.
 - The session-count chip folds into a small star above the pet after a few seconds. Click the star to open the list.
 

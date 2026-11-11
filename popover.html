@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>Claude Pet</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  html, body { background: transparent; overflow: hidden; user-select: none; }
+  [hidden] { display: none !important; }
+  /* 상단바 아래로 펼쳐지는 구름 카드. 그림자가 잘리지 않게 창 안쪽에 여백 */
+  #card { margin: 6px 10px 18px; max-height: 600px; display: flex; flex-direction: column; overflow: hidden;
+    background: linear-gradient(180deg, #ffffff 0%, #eef6ff 100%); animation: drop .35s var(--ease); }
+  @keyframes drop { from { opacity: 0; transform: translateY(-6px) scale(.98); } }
+  header { display: flex; align-items: center; gap: 8px; padding: 13px 12px 10px 15px; }
+  header h1 { flex: 1; display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 800; color: var(--navy); }
+  header h1 .n { font-variant-numeric: tabular-nums; }
+  header h1 .look { padding: 1px 8px; border-radius: 999px; background: #ffdf6e; font-size: 11.5px; }
+  .pill { padding: 4px 11px; border-radius: 999px; font-size: 11.5px; font-weight: 800; color: var(--navy); background: var(--ice);
+    box-shadow: inset 0 1.5px 0 rgb(255 255 255 / .8); transition: transform .3s var(--ease); }
+  .pill:hover { transform: translateY(-1px); }
+  .pill[aria-pressed=false] { background: #fff; color: var(--faint); box-shadow: inset 0 0 0 1.5px var(--hairline); }
+  .pill.app { background: var(--butter); }
+
+  #rows { min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 0 9px 11px; display: flex; flex-direction: column; gap: 8px; }
+  #rows::-webkit-scrollbar { width: 8px; } #rows::-webkit-scrollbar-thumb { background: rgb(125 167 217 / .4); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+  .empty { padding: 4px 6px 14px; color: var(--muted); text-align: center; }
+
+  /* 세션 한 장: 위치 · 시각 / 상태 · 지금 하는 일 / 요청 / 서브에이전트 */
+  .row { position: relative; display: grid; grid-template-columns: 30px minmax(0, 1fr); column-gap: 10px; padding: 11px 11px 11px 10px; border-radius: 18px;
+    background: #fff; box-shadow: inset 0 1.5px 0 #fff, 0 6px 14px -10px rgb(61 107 166 / .55); cursor: pointer; transition: transform .4s var(--ease); }
+  .row:hover { transform: translateY(-1px); }
+  .row .sticker { width: 30px; height: 30px; }
+  .row .sticker .ico { width: 16px; height: 16px; }
+  .body { min-width: 0; }
+  .head { display: flex; align-items: baseline; gap: 6px; }
+  .head b { min-width: 0; font-weight: 800; color: var(--navy); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .head .from { flex: 1; min-width: 0; font-size: 10.5px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .head time { flex: none; margin-left: auto; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .row:has(.x) time { margin-right: 22px; }
+  .state { margin-top: 3px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+  .req { margin-top: 3px; font-size: 11.5px; color: var(--faint); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .x { position: absolute; top: 8px; right: 8px; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; color: var(--faint); }
+  .x:hover { background: var(--ice); color: var(--navy); }
+
+  /* 서브에이전트: 분홍 볼터치 표식. 종류 · 하는 일 / 맡긴 일 / 지금 */
+  .agents { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .agents > strong { display: block; font-size: 11.5px; font-weight: 800; color: var(--cheek-ink); } /* 글자 덩어리가 flex 항목으로 쪼개지지 않게 block */
+  .agents > strong > span { white-space: nowrap; }
+  .agents > strong .star { width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px; }
+  .agents > strong .n { padding: 0 6px; border-radius: 999px; background: var(--cheek); font-variant-numeric: tabular-nums; }
+  .agent { padding: 8px 9px; border-radius: 13px; background: var(--cheek-bg); box-shadow: inset 0 0 0 1px var(--cheek-line); }
+  .agent .top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .agent .type { flex: 0 0 auto; max-width: 62%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px 8px; border-radius: 999px; background: var(--cheek); color: var(--cheek-ink); font-size: 11px; font-weight: 800; }
+  .agent .desc { margin-top: 5px; font-weight: 700; color: var(--navy); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .agent .st { flex: none; margin-left: auto; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .agent .st.on { color: var(--cheek-ink); font-weight: 700; }
+  .agent .role { margin-top: 2px; font-size: 11px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .agent .task { margin-top: 4px; font-size: 11.5px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .agent .task b, .agent .now b { font-weight: 700; color: var(--navy); }
+  .agent.brief { padding: 6px 9px; background: transparent; }
+  .agent .bd { min-width: 0; flex: 1; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .agent .now { margin-top: 3px; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+</style>
+</head>
+<body>
+<section id="card" class="mochi">
+  <header>
+    <h1 id="title"></h1>
+    <button class="pill" id="pet-toggle" aria-pressed="true">펫</button>
+    <button class="pill app" id="open-app">작업함</button>
+  </header>
+  <div id="rows"></div>
+</section>
+<script src="status.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id)
+  let sessions = [], lastKey = ''
+
+  // 서브에이전트 한 장: 무엇(종류 · 그 종류가 하는 일), 메인이 맡긴 일, 지금 하는 일
+  function agentCard(a, brief) {
+    const mins = Math.floor((Date.now() - (a.started || a.updated)) / 60000)
+    const st = a.status === 'working' ? `<span class="st on">${mins < 1 ? '방금 시작' : `${mins}분째`}</span>`
+      : a.status === 'done' ? `<span class="st">끝남 · ${ago(a.finished || a.updated)}</span>` : '<span class="st">멈춤</span>'
+    if (brief) return `<div class="agent brief"><div class="top"><span class="type" title="${esc(a.type)}">${esc(agentLabel(a.type))}</span>
+      <span class="bd">${esc(a.desc || a.role || '')}</span>${st}</div></div>` // 끝난 지 얼마 안 된 것: 한 줄
+    return `<div class="agent"><div class="top"><span class="type" title="${esc(a.type)}">${esc(agentLabel(a.type))}</span>${st}</div>
+      ${a.desc ? `<p class="desc">${esc(a.desc)}</p>` : ''}
+      ${a.role ? `<p class="role">${esc(a.role)}</p>` : ''}
+      ${a.task ? `<p class="task"><b>맡긴 일</b> · ${esc(a.task)}</p>` : ''}
+      ${a.status === 'working' && a.line ? `<p class="now"><b>지금</b> · ${esc(a.line)}${a.tools ? ` · 도구 ${a.tools}회` : ''}</p>` : ''}</div>`
+  }
+
+
+  function render() {
+    const sorted = [...sessions].sort(bySeverity), look = sorted.filter(needsLook).length
+    $('title').innerHTML = `${star()}세션 <span class="n">${sessions.length}</span>${look ? `<span class="look">확인 ${look}</span>` : ''}`
+    const key = JSON.stringify(sorted.map((s) => [s.id, viewStatus(s), s.prompt, s.line, s.hint, metaText(s), placeOf(s),
+      (s.agents || []).map((a) => [a.id, a.status, a.line, a.tools, a.desc, a.task, Math.floor((Date.now() - (a.started || a.updated)) / 60000), Math.floor((Date.now() - (a.finished || a.updated)) / 60000)])]))
+    if (key !== lastKey) {
+      lastKey = key
+      $('rows').innerHTML = !sorted.length ? '<p class="empty">열린 세션이 없어요</p>' : sorted.map((s) => {
+        const v = viewStatus(s), agents = s.agents || []
+        const x = needsLook(s) ? `<span class="x" role="button" aria-label="확인" title="확인" data-ack="${esc(s.id)}" data-updated="${s.updated}">${icon('close')}</span>`
+          : v === 'idle' ? `<span class="x" role="button" aria-label="세션 끄기" title="세션 끄기" data-dismiss="${esc(s.id)}">${icon('close')}</span>` : ''
+        return `<article class="row" data-status="${v}"><span class="sticker">${icon(v, 'ico' + (v === 'working' ? ' spin' : ''))}</span>
+          <div class="body"><div class="head"><b>${esc(placeOf(s))}</b><span class="from">${esc(fromOf(s))}</span><time>${metaText(s)}</time></div>
+          <p class="state"><em class="hl">${STATUS[v].label}</em>${statusLine(s) ? ' · ' + esc(statusLine(s)) : ''}</p>
+          ${s.prompt ? `<p class="req">요청 · ${esc(s.prompt)}</p>` : ''}
+          ${agents.length ? ((g) => `<div class="agents"><strong>${agentsHead(g)}</strong>${g.live.map((a) => agentCard(a)).join('')}${g.recent.map((a) => agentCard(a, true)).join('')}</div>`)(splitAgents(agents)) : ''}</div>${x}</article>`
+      }).join('')
+    }
+    window.pet.popHeight($('card').offsetHeight + 24) // 창 높이 = 카드 + 위아래 여백(문서 높이는 창보다 작아지지 않는다)
+  }
+  setInterval(render, 15000) // 경과 시간 갱신
+
+  window.pet.onSessions((list) => { sessions = list; render() })
+  window.pet.onConfig((c) => $('pet-toggle').setAttribute('aria-pressed', !c.petHidden))
+  $('pet-toggle').addEventListener('click', (e) => window.pet.setPetVisible(e.currentTarget.getAttribute('aria-pressed') !== 'true'))
+  $('open-app').addEventListener('click', () => { window.pet.popClose(); window.pet.openApp() })
+  $('rows').addEventListener('click', (e) => {
+    const d = e.target.closest('[data-dismiss]'); if (d) return window.pet.dismiss(d.dataset.dismiss)
+    const a = e.target.closest('[data-ack]'); if (a) return window.pet.ack(a.dataset.ack, +a.dataset.updated)
+    if (e.target.closest('.row')) { window.pet.popClose(); window.pet.openApp() }
+  })
+  addEventListener('keydown', (e) => e.key === 'Escape' && window.pet.popClose())
+</script>
+</body>
+</html>

@@ -2,12 +2,12 @@
 window.STATUS = {
   waiting: { rank: 0, label: '답변 필요', detail: '세션에서 답하거나 승인해 주세요.' },
   error: { rank: 1, label: '실패', detail: '세션에서 원인을 확인해 주세요.' },
-  done: { rank: 2, label: '응답 도착', detail: '응답이 왔어요. 테스트·배포까지 끝났다는 뜻은 아니에요.' },
+  done: { rank: 2, label: '응답 도착', detail: '' },
   working: { rank: 3, label: '진행 중', detail: '작업하고 있어요.' },
   idle: { rank: 4, label: '대기 중', detail: '다음 요청을 기다리고 있어요.' },
 }
 // 확인한 응답·실패는 대기 중으로 내려간다(세션은 그대로 남는다)
-window.viewStatus = (s) => (s.acked && ['done', 'error', 'waiting'].includes(s.status) ? 'idle' : s.status)
+window.viewStatus = (s) => (!STATUS[s.status] || (s.acked && ['done', 'error', 'waiting'].includes(s.status)) ? 'idle' : s.status) // 모르는 상태는 대기로(화면이 깨지지 않게)
 window.needsLook = (s) => ['waiting', 'error', 'done'].includes(viewStatus(s))
 window.bySeverity = (a, b) => STATUS[viewStatus(a)].rank - STATUS[viewStatus(b)].rank || b.updated - a.updated
 
@@ -54,3 +54,16 @@ window.placeOf = (s) => s.workdir || s.project
 window.fromOf = (s) => (s.workdir && s.workdir !== s.project ? `${s.project}에서` : '')
 window.icon = (name, cls = 'ico') => `<svg class="${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`
 window.esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`)
+// 서브에이전트 종류 알약에 쓰는 짧은 이름. 기본 종류는 한글, 플러그인 에이전트는 콜론 뒤 이름
+const AGENT_LABEL = { 'general-purpose': '범용', claude: '범용', Explore: '탐색', Plan: '설계', fork: '분기', 'claude-code-guide': '사용법 안내', 'statusline-setup': '상태 줄' }
+window.agentLabel = (type) => AGENT_LABEL[type] || String(type || '').split(':').pop()
+// 서브에이전트 나누기: 진행 중(카드 전체) · 끝난 지 10분 안(한 줄) · 그보다 오래된 것(숨기고 머리줄 숫자로만)
+window.AGENT_RECENT_MS = 10 * 60000
+window.splitAgents = (agents = [], now = Date.now()) => {
+  const done = agents.filter((a) => a.status !== 'working').sort((a, b) => (b.finished || b.updated) - (a.finished || a.updated))
+  return { live: agents.filter((a) => a.status === 'working'), recent: done.filter((a) => now - (a.finished || a.updated) < AGENT_RECENT_MS),
+    old: done.filter((a) => now - (a.finished || a.updated) >= AGENT_RECENT_MS) }
+}
+// 덩어리(<span>)마다 줄바꿈하지 않아, 좁은 팝업에서는 「· 진행 중 N」 단위로 다음 줄에 넘어간다
+window.agentsHead = ({ live, recent, old }) => `<span>${star()}서브에이전트 <span class="n">${live.length + recent.length + old.length}</span></span>`
+  + `${live.length ? ` <span>· 진행 중 ${live.length}</span>` : ''}${old.length ? ` <span>· 지난 ${old.length}</span>` : ''}`

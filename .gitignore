@@ -6,3 +6,6 @@ build/icon.png
 build/icon.ico
 build/tray.png
 build/tray@2x.png
+build/tray-done*.png
+build/tray-dim*.png
+build/tray-error*.png
