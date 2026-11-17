@@ -20,4 +20,7 @@ contextBridge.exposeInMainWorld('pet', {
   popHeight: (h) => ipcRenderer.send('pop-height', h),
   popClose: () => ipcRenderer.send('pop-close'),
   setPetVisible: (on) => ipcRenderer.send('pet-visible', on),
+  setAutoClose: (on) => ipcRenderer.send('auto-close', on),
+  resetPos: () => ipcRenderer.send('reset-pos'),
+  quit: () => ipcRenderer.send('quit'),
 })

@@ -102,7 +102,7 @@
   .choice.add svg { width: 40px; height: 40px; }
   .options { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 24px; }
   .seg { display: flex; flex-direction: column; gap: 8px; font-size: 12px; font-weight: 600; color: var(--muted); }
-  .seg div { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: var(--hairline); }
+  .seg div { align-self: flex-start; display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: var(--hairline); }
   .seg button { padding: 6px 12px; border-radius: 9px; font-weight: 600; color: var(--muted); transition: background .2s, color .2s; }
   .seg button[aria-pressed=true] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgb(0 0 0 / .1); }
 </style>
@@ -112,6 +112,7 @@
   <h1><span class="pet" id="logo" data-pet="idle"><span class="figure"></span></span>Claude Pet</h1>
   <button data-view="inbox" aria-current="true">작업함<span class="count" id="nav-count" hidden></span></button>
   <button data-view="character">캐릭터</button>
+  <button data-view="settings">설정</button>
 </nav>
 <main>
   <section class="page" id="inbox">
@@ -133,6 +134,16 @@
       <div class="seg">크기<div id="sizes"></div></div>
     </div>
   </section>
+  <section class="page" id="settings" hidden>
+    <div class="head"><h2>설정</h2></div>
+    <p class="intro">상단바 아이콘 메뉴와 같은 설정이에요. 아이콘이 노치에 가려 안 보일 때 여기서 바꿔요.</p>
+    <div class="options">
+      <div class="seg" id="opt-pet" hidden>펫 띄우기<div id="pet-visible"></div></div>
+      <div class="seg" id="opt-auto" hidden>놀고 있는 세션 30분 뒤 끄기<div id="auto-close"></div></div>
+      <div class="seg">펫 위치<div><button id="reset-pos">제자리로</button></div></div>
+      <div class="seg">앱<div><button id="quit">Claude Pet 끝내기</button></div></div>
+    </div>
+  </section>
 </main>
 <script src="status.js"></script>
 <script src="characters.js"></script>
@@ -145,6 +156,7 @@
     document.querySelectorAll('nav button').forEach((x) => x.setAttribute('aria-current', x === b))
     $('inbox').hidden = b.dataset.view !== 'inbox'
     $('character').hidden = b.dataset.view !== 'character'
+    $('settings').hidden = b.dataset.view !== 'settings'
   }))
 
   function renderConnection() {
@@ -238,7 +250,19 @@
   })
   $('states').addEventListener('click', (e) => { const b = e.target.closest('[data-state]'); if (b) { previewState = b.dataset.state; renderCharacters() } })
   $('sizes').addEventListener('click', (e) => { const b = e.target.closest('[data-size]'); if (b) window.pet.setSize(+b.dataset.size) })
-  window.pet.onConfig((c) => { config = c; renderCharacters(); lastKey = ''; renderInbox() })
+  // 설정 탭: 메뉴와 같은 조건(펫 숨기기는 맥만, 자동 끄기는 Windows 제외)
+  const onOff = (on) => `<button data-on="1" aria-pressed="${on}">켬</button><button data-on="" aria-pressed="${!on}">끔</button>`
+  function renderSettings() {
+    $('opt-pet').hidden = !navigator.userAgent.includes('Macintosh')
+    $('opt-auto').hidden = navigator.userAgent.includes('Windows')
+    $('pet-visible').innerHTML = onOff(!config.petHidden)
+    $('auto-close').innerHTML = onOff(config.autoClose !== false)
+  }
+  $('pet-visible').addEventListener('click', (e) => { const b = e.target.closest('[data-on]'); if (b) window.pet.setPetVisible(!!b.dataset.on) })
+  $('auto-close').addEventListener('click', (e) => { const b = e.target.closest('[data-on]'); if (b) window.pet.setAutoClose(!!b.dataset.on) })
+  $('reset-pos').addEventListener('click', () => window.pet.resetPos())
+  $('quit').addEventListener('click', () => window.pet.quit())
+  window.pet.onConfig((c) => { config = c; renderCharacters(); renderSettings(); lastKey = ''; renderInbox() })
 </script>
 </body>
 </html>

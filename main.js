@@ -320,6 +320,10 @@ app.whenReady().then(() => {
   ipcMain.on('open-app', openApp)
   ipcMain.on('set-character', (_e, id) => setCharacter(id))
   ipcMain.on('set-size', (_e, px) => setConfig({ size: px }))
+  // 앱 창 설정 탭: 노치에 가려 상단바 아이콘이 안 보일 때도 메뉴와 같은 설정을 바꾼다
+  ipcMain.on('auto-close', (_e, on) => setConfig({ autoClose: !!on }))
+  ipcMain.on('reset-pos', () => { placePet(); setConfig({ pos: null }) })
+  ipcMain.on('quit', () => app.quit())
   ipcMain.on('ack', (_e, id, updated) => { acks.set(id, updated); broadcast('sessions', readSessions()) })
   // 대기 세션 끄기: 훅이 남긴 Claude 프로세스가 있으면 물어보고 끝낸다(SIGTERM, claude --resume으로 다시 열 수 있음).
   // 상태 파일은 어느 쪽이든 지운다. 프로세스를 남겨 둔 세션은 다음 요청 때 다시 나타난다.
