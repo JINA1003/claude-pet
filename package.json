@@ -10,7 +10,8 @@
     "install-hooks": "node install.mjs",
     "uninstall-hooks": "node install.mjs --uninstall",
     "dist:win": "node build-win.mjs",
-    "dist:mac": "electron-builder --mac dmg --universal"
+    "dist:mac": "electron-builder --mac dmg --universal",
+    "postdist:mac": "rm -rf dist/mac*/"
   },
   "devDependencies": {
     "electron": "^45.0.0",
